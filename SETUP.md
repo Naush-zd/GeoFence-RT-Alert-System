@@ -11,38 +11,36 @@
 
 From the repository root:
 
-```powershell
+```sh
 npm install
-cd apps/api
-go mod download
-cd ../..
+go mod download -C apps/api
 ```
 
 ## Start the applications
 
 Run both the Go API and React frontend:
 
-```powershell
+```sh
 npm run dev
 ```
 
 The frontend is available at `http://localhost:5173` and the API at
 `http://localhost:8080`. Verify the API with:
 
-```powershell
-Invoke-WebRequest http://localhost:8080/healthz
+```sh
+curl http://localhost:8080/healthz
 ```
 
 To run either app separately:
 
-```powershell
+```sh
 npm run dev:web
 npm run dev:api
 ```
 
 ## Validate
 
-```powershell
+```sh
 npm run build
 npm run test
 ```
@@ -51,7 +49,7 @@ npm run test
 
 If Docker Desktop is installed, start the PostGIS service with:
 
-```powershell
+```sh
 docker compose up -d postgres
 ```
 
@@ -77,22 +75,21 @@ GET  /ws/alerts
 
 Example request:
 
-```powershell
-$body = @{
-  name = "Downtown Delivery Zone"
-  description = "Main delivery area"
-  coordinates = @(
-    @(37.7749, -122.4194),
-    @(37.7849, -122.4194),
-    @(37.7849, -122.4094),
-    @(37.7749, -122.4094),
-    @(37.7749, -122.4194)
-  )
-  category = "delivery_zone"
-} | ConvertTo-Json
-
-Invoke-RestMethod http://localhost:8080/geofences `
-  -Method Post -ContentType "application/json" -Body $body
+```sh
+curl -X POST http://localhost:8080/geofences \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "Downtown Delivery Zone",
+    "description": "Main delivery area",
+    "coordinates": [
+      [37.7749, -122.4194],
+      [37.7849, -122.4194],
+      [37.7849, -122.4094],
+      [37.7749, -122.4094],
+      [37.7749, -122.4194]
+    ],
+    "category": "delivery_zone"
+  }'
 ```
 
 ## Repository layout
