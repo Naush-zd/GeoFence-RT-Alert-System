@@ -10,6 +10,7 @@ import (
 	"github.com/yourusername/geofencing-platform/apps/api/internal/config"
 	"github.com/yourusername/geofencing-platform/apps/api/internal/database"
 	"github.com/yourusername/geofencing-platform/apps/api/internal/handlers"
+	"github.com/yourusername/geofencing-platform/apps/api/internal/realtime"
 	"github.com/yourusername/geofencing-platform/apps/api/internal/routes"
 )
 
@@ -29,7 +30,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              ":" + cfg.APIPort,
-		Handler:           routes.New(handlers.New(db)),
+		Handler:           routes.New(handlers.New(db, realtime.NewHub())),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

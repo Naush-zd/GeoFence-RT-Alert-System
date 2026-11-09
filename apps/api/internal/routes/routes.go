@@ -14,6 +14,12 @@ func New(api handlers.Handler) *gin.Engine {
 	router.GET("/geofences", api.ListGeofences)
 	router.POST("/vehicles", api.CreateVehicle)
 	router.GET("/vehicles", api.ListVehicles)
+	router.POST("/vehicles/location", api.UpdateVehicleLocation)
+	router.GET("/vehicles/location/:vehicle_id", api.GetVehicleLocation)
+	router.POST("/alerts/configure", api.ConfigureAlert)
+	router.GET("/alerts", api.ListAlerts)
+	router.GET("/violations/history", api.ListViolations)
+	router.GET("/ws/alerts", api.AlertsWebSocket)
 
 	return router
 }

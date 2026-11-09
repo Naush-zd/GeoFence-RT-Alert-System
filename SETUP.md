@@ -67,6 +67,12 @@ POST /geofences
 GET  /geofences?category=delivery_zone
 POST /vehicles
 GET  /vehicles
+POST /vehicles/location
+GET  /vehicles/location/:vehicle_id
+POST /alerts/configure
+GET  /alerts
+GET  /violations/history
+GET  /ws/alerts
 ```
 
 Example request:
