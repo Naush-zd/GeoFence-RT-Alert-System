@@ -11,6 +11,25 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d geofencing"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./apps/api
+    container_name: geofencing-api
+    restart: unless-stopped
+    environment:
+      API_PORT: "8080"
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/geofencing?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
 
 volumes:
   postgres_data:
