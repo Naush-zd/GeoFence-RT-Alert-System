@@ -47,7 +47,7 @@ npm run test
 
 ## Database
 
-If Docker Desktop is installed, start the PostGIS service with:
+For host-based API development, start only PostgreSQL/PostGIS with:
 
 ```sh
 docker compose up -d postgres
@@ -56,8 +56,24 @@ docker compose up -d postgres
 The configured local database is `geofencing` on port `5432` with user and
 password `postgres`.
 
-The API applies the initial `geofences` and `vehicles` tables automatically on
-startup. The first implemented endpoints are:
+The API applies all required tables automatically on startup, including
+geofences, vehicles, locations, alert configurations, violations, and emitted
+alert events.
+
+To run the API and database entirely in Docker:
+
+```sh
+docker compose up -d
+```
+
+The API container is available at `http://localhost:8080`. Stop the containers
+with:
+
+```sh
+docker compose down
+```
+
+The implemented backend endpoints are:
 
 ```text
 GET  /healthz
