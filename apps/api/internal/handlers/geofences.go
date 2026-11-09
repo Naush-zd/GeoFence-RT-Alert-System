@@ -1,15 +1,12 @@
 package handlers
 
 import (
-	"encoding/json"
-	"errors"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/yourusername/geofencing-platform/apps/api/internal/models"
+	"github.com/yourusername/geofencing-platform/apps/api/internal/services"
 )
 
 func (h Handler) CreateGeofence(c *gin.Context) {
@@ -19,92 +16,33 @@ func (h Handler) CreateGeofence(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, err.Error(), started)
 		return
 	}
-	if err := validateGeofence(input); err != nil {
+	if err := services.ValidateGeofence(input); err != nil {
 		writeError(c, http.StatusBadRequest, err.Error(), started)
 		return
 	}
 
-	coordinates, err := json.Marshal(input.Coordinates)
-	if err != nil {
-		writeError(c, http.StatusInternalServerError, "encode coordinates: "+err.Error(), started)
-		return
-	}
-
-	id := uuid.New()
-	err = h.DB.WithContext(c.Request.Context()).Exec(`
-		INSERT INTO geofences (id, name, description, coordinates, category)
-		VALUES ($1, $2, $3, $4, $5)
-	`, id, input.Name, input.Description, coordinates, input.Category).Error
+	geofence, err := h.Geofences.Create(c.Request.Context(), input)
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, "create geofence: "+err.Error(), started)
 		return
 	}
 
 	writeJSON(c, http.StatusCreated, map[string]any{
-		"id":     id,
-		"name":   input.Name,
+		"id":     geofence.ID,
+		"name":   geofence.Name,
 		"status": "active",
 	}, started)
 }
 func (h Handler) ListGeofences(c *gin.Context) {
 	started := time.Now()
-	category := c.Query("category")
-	query := `SELECT id, name, description, coordinates, category, created_at FROM geofences`
-	args := []any{}
-	if category != "" {
-		query += " WHERE category = $1"
-		args = append(args, category)
-	}
-	query += " ORDER BY created_at DESC"
-
-	rows, err := queryRows(c.Request.Context(), h.DB, query, args...)
+	geofences, err := h.Geofences.List(c.Request.Context(), c.Query("category"))
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, "list geofences: "+err.Error(), started)
-		return
-	}
-	defer rows.Close()
-
-	geofences := make([]models.Geofence, 0)
-	for rows.Next() {
-		var item models.Geofence
-		var rawCoordinates []byte
-		if err := rows.Scan(&item.ID, &item.Name, &item.Description, &rawCoordinates, &item.Category, &item.CreatedAt); err != nil {
-			writeError(c, http.StatusInternalServerError, "read geofence: "+err.Error(), started)
-			return
-		}
-		if err := json.Unmarshal(rawCoordinates, &item.Coordinates); err != nil {
-			writeError(c, http.StatusInternalServerError, "decode coordinates: "+err.Error(), started)
-			return
-		}
-		geofences = append(geofences, item)
-	}
-	if err := rows.Err(); err != nil {
-		writeError(c, http.StatusInternalServerError, "read geofences: "+err.Error(), started)
 		return
 	}
 
 	writeJSON(c, http.StatusOK, map[string]any{"geofences": geofences}, started)
 }
 func validateGeofence(input models.GeofenceRequest) error {
-	if strings.TrimSpace(input.Name) == "" || strings.TrimSpace(input.Category) == "" {
-		return errors.New("name and category are required")
-	}
-	if len(input.Coordinates) < 4 {
-		return errors.New("coordinates must contain at least 4 points")
-	}
-	switch input.Category {
-	case "delivery_zone", "restricted_zone", "toll_zone", "customer_area":
-	default:
-		return errors.New("invalid category")
-	}
-	for _, point := range input.Coordinates {
-		if len(point) != 2 || point[0] < -90 || point[0] > 90 || point[1] < -180 || point[1] > 180 {
-			return errors.New("coordinates must be [latitude, longitude] within valid ranges")
-		}
-	}
-	if input.Coordinates[0][0] != input.Coordinates[len(input.Coordinates)-1][0] ||
-		input.Coordinates[0][1] != input.Coordinates[len(input.Coordinates)-1][1] {
-		return errors.New("first and last coordinates must match")
-	}
-	return nil
+	return services.ValidateGeofence(input)
 }

@@ -10,16 +10,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/yourusername/geofencing-platform/apps/api/internal/realtime"
+	"github.com/yourusername/geofencing-platform/apps/api/internal/services"
 	"gorm.io/gorm"
 )
 
 type Handler struct {
-	DB  *gorm.DB
-	Hub *realtime.Hub
+	DB        *gorm.DB
+	Hub       *realtime.Hub
+	Geofences *services.GeofenceService
 }
 
-func New(db *gorm.DB, hub *realtime.Hub) Handler {
-	return Handler{DB: db, Hub: hub}
+func New(db *gorm.DB, hub *realtime.Hub, geofences *services.GeofenceService) Handler {
+	return Handler{DB: db, Hub: hub, Geofences: geofences}
 }
 func (h Handler) Health(c *gin.Context) {
 	started := time.Now()

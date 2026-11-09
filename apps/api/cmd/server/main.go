@@ -14,7 +14,9 @@ import (
 	"github.com/yourusername/geofencing-platform/apps/api/internal/database"
 	"github.com/yourusername/geofencing-platform/apps/api/internal/handlers"
 	"github.com/yourusername/geofencing-platform/apps/api/internal/realtime"
+	"github.com/yourusername/geofencing-platform/apps/api/internal/repositories"
 	"github.com/yourusername/geofencing-platform/apps/api/internal/routes"
+	"github.com/yourusername/geofencing-platform/apps/api/internal/services"
 )
 
 func main() {
@@ -37,9 +39,11 @@ func main() {
 		log.Fatalf("run database migrations: %v", err)
 	}
 
+	geofenceRepository := repositories.NewGeofenceRepository(db)
+	geofenceService := services.NewGeofenceService(geofenceRepository)
 	server := &http.Server{
 		Addr:              ":" + cfg.APIPort,
-		Handler:           routes.New(handlers.New(db, realtime.NewHub())),
+		Handler:           routes.New(handlers.New(db, realtime.NewHub(), geofenceService)),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
