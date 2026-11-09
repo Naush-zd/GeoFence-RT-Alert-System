@@ -67,10 +67,24 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 			recorded_at TIMESTAMPTZ NOT NULL
 		);
 
+		CREATE TABLE IF NOT EXISTS alert_events (
+			id UUID PRIMARY KEY,
+			vehicle_id UUID NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+			geofence_id UUID NOT NULL REFERENCES geofences(id) ON DELETE CASCADE,
+			event_type TEXT NOT NULL CHECK (event_type IN ('entry', 'exit')),
+			latitude DOUBLE PRECISION NOT NULL,
+			longitude DOUBLE PRECISION NOT NULL,
+			occurred_at TIMESTAMPTZ NOT NULL,
+			payload JSONB NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		);
+
 		CREATE INDEX IF NOT EXISTS vehicle_locations_vehicle_time_idx
 			ON vehicle_locations (vehicle_id, recorded_at DESC);
 		CREATE INDEX IF NOT EXISTS violations_vehicle_time_idx
 			ON violations (vehicle_id, recorded_at DESC);
+		CREATE INDEX IF NOT EXISTS alert_events_occurred_at_idx
+			ON alert_events (occurred_at DESC);
 	`)
 	return err
 }

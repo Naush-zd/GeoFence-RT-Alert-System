@@ -226,39 +226,56 @@ func (h Handler) ListViolations(c *gin.Context) {
 	}
 	writeJSON(c, http.StatusOK, map[string]any{"violations": violations, "total_count": total}, started)
 }
-func (h Handler) broadcastAlert(c *gin.Context, vehicleID uuid.UUID, vehicleNumber, driverName string, geofence models.Geofence, eventType string, input models.LocationRequest) {
-	rows, err := h.DB.Query(c.Request.Context(), `
-		SELECT event_type
-		FROM alert_configurations
-		WHERE geofence_id = $1
-		  AND status = 'active'
-		  AND (vehicle_id IS NULL OR vehicle_id = $2)
-		  AND (event_type = $3 OR event_type = 'both')
-	`, geofence.ID, vehicleID, eventType)
+func (h Handler) broadcastAlert(c *gin.Context, vehicleID uuid.UUID, vehicleNumber, driverName string, geofence models.Geofence, eventType string, input models.LocationRequest) error {
+	geofenceID, err := uuid.Parse(geofence.ID)
 	if err != nil {
-		return
+		return fmt.Errorf("parse geofence id: %w", err)
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var configuredEvent string
-		if rows.Scan(&configuredEvent) != nil {
-			continue
-		}
-		var event models.AlertEvent
-		event.EventID = uuid.NewString()
-		event.EventType = eventType
-		event.Timestamp = input.Timestamp
-		event.Vehicle.ID = vehicleID.String()
-		event.Vehicle.Number = vehicleNumber
-		event.Vehicle.DriverName = driverName
-		event.Geofence.ID = geofence.ID
-		event.Geofence.Name = geofence.Name
-		event.Geofence.Category = geofence.Category
-		event.Location.Latitude = input.Latitude
-		event.Location.Longitude = input.Longitude
-		payload, err := json.Marshal(event)
-		if err == nil {
-			go h.Hub.Broadcast(context.Background(), payload)
-		}
+
+	var configured bool
+	if err := h.DB.QueryRow(c.Request.Context(), `
+		SELECT EXISTS (
+			SELECT 1
+			FROM alert_configurations
+			WHERE geofence_id = $1
+			  AND status = 'active'
+			  AND (vehicle_id IS NULL OR vehicle_id = $2)
+			  AND (event_type = $3 OR event_type = 'both')
+		)
+	`, geofenceID, vehicleID, eventType).Scan(&configured); err != nil {
+		return err
 	}
+	if !configured {
+		return nil
+	}
+
+	event := models.AlertEvent{
+		EventID:   uuid.NewString(),
+		EventType: eventType,
+		Timestamp: input.Timestamp,
+	}
+	event.Vehicle.ID = vehicleID.String()
+	event.Vehicle.Number = vehicleNumber
+	event.Vehicle.DriverName = driverName
+	event.Geofence.ID = geofence.ID
+	event.Geofence.Name = geofence.Name
+	event.Geofence.Category = geofence.Category
+	event.Location.Latitude = input.Latitude
+	event.Location.Longitude = input.Longitude
+
+	payload, err := json.Marshal(event)
+	if err != nil {
+		return err
+	}
+	if _, err := h.DB.Exec(c.Request.Context(), `
+		INSERT INTO alert_events (
+			id, vehicle_id, geofence_id, event_type, latitude, longitude, occurred_at, payload
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`, event.EventID, vehicleID, geofenceID, eventType, input.Latitude, input.Longitude, input.Timestamp, payload); err != nil {
+		return err
+	}
+
+	go h.Hub.Broadcast(context.Background(), payload)
+	return nil
 }

@@ -88,7 +88,10 @@ func (h Handler) UpdateVehicleLocation(c *gin.Context) {
 			writeError(c, http.StatusInternalServerError, "record violation: "+err.Error(), started)
 			return
 		}
-		h.broadcastAlert(c, vehicleID, vehicleNumber, driverName, geofence, eventType, input)
+		if err := h.broadcastAlert(c, vehicleID, vehicleNumber, driverName, geofence, eventType, input); err != nil {
+			writeError(c, http.StatusInternalServerError, "record alert: "+err.Error(), started)
+			return
+		}
 	}
 
 	writeJSON(c, http.StatusOK, map[string]any{
