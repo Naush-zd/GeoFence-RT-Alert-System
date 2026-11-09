@@ -1,17 +1,19 @@
 package routes
 
 import (
-	"net/http"
-
+	"github.com/gin-gonic/gin"
 	"github.com/yourusername/geofencing-platform/apps/api/internal/handlers"
 )
 
-func New(api handlers.Handler) http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", api.Health)
-	mux.HandleFunc("POST /geofences", api.CreateGeofence)
-	mux.HandleFunc("GET /geofences", api.ListGeofences)
-	mux.HandleFunc("POST /vehicles", api.CreateVehicle)
-	mux.HandleFunc("GET /vehicles", api.ListVehicles)
-	return mux
+func New(api handlers.Handler) *gin.Engine {
+	router := gin.New()
+	router.Use(gin.Logger(), gin.Recovery())
+
+	router.GET("/healthz", api.Health)
+	router.POST("/geofences", api.CreateGeofence)
+	router.GET("/geofences", api.ListGeofences)
+	router.POST("/vehicles", api.CreateVehicle)
+	router.GET("/vehicles", api.ListVehicles)
+
+	return router
 }

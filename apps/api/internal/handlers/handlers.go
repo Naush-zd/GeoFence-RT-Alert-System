@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/yourusername/geofencing-platform/apps/api/internal/models"
@@ -21,56 +22,56 @@ func New(db *pgxpool.Pool) Handler {
 	return Handler{DB: db}
 }
 
-func (h Handler) Health(w http.ResponseWriter, r *http.Request) {
+func (h Handler) Health(c *gin.Context) {
 	started := time.Now()
-	if err := h.DB.Ping(r.Context()); err != nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+	if err := h.DB.Ping(c.Request.Context()); err != nil {
+		writeJSON(c, http.StatusServiceUnavailable, map[string]any{
 			"status": "database_unavailable",
 			"error":  "database is unavailable",
 		}, started)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ok"}, started)
+	writeJSON(c, http.StatusOK, map[string]any{"status": "ok"}, started)
 }
 
-func (h Handler) CreateGeofence(w http.ResponseWriter, r *http.Request) {
+func (h Handler) CreateGeofence(c *gin.Context) {
 	started := time.Now()
 	var input models.GeofenceRequest
-	if err := decodeJSON(r, &input); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error(), started)
+	if err := decodeJSON(c, &input); err != nil {
+		writeError(c, http.StatusBadRequest, err.Error(), started)
 		return
 	}
 	if err := validateGeofence(input); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error(), started)
+		writeError(c, http.StatusBadRequest, err.Error(), started)
 		return
 	}
 
 	coordinates, err := json.Marshal(input.Coordinates)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "encode coordinates: "+err.Error(), started)
+		writeError(c, http.StatusInternalServerError, "encode coordinates: "+err.Error(), started)
 		return
 	}
 
 	id := uuid.New()
-	_, err = h.DB.Exec(r.Context(), `
+	_, err = h.DB.Exec(c.Request.Context(), `
 		INSERT INTO geofences (id, name, description, coordinates, category)
 		VALUES ($1, $2, $3, $4, $5)
 	`, id, input.Name, input.Description, coordinates, input.Category)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "create geofence: "+err.Error(), started)
+		writeError(c, http.StatusInternalServerError, "create geofence: "+err.Error(), started)
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, map[string]any{
+	writeJSON(c, http.StatusCreated, map[string]any{
 		"id":     id,
 		"name":   input.Name,
 		"status": "active",
 	}, started)
 }
 
-func (h Handler) ListGeofences(w http.ResponseWriter, r *http.Request) {
+func (h Handler) ListGeofences(c *gin.Context) {
 	started := time.Now()
-	category := r.URL.Query().Get("category")
+	category := c.Query("category")
 	query := `SELECT id, name, description, coordinates, category, created_at FROM geofences`
 	args := []any{}
 	if category != "" {
@@ -79,9 +80,9 @@ func (h Handler) ListGeofences(w http.ResponseWriter, r *http.Request) {
 	}
 	query += " ORDER BY created_at DESC"
 
-	rows, err := h.DB.Query(r.Context(), query, args...)
+	rows, err := h.DB.Query(c.Request.Context(), query, args...)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "list geofences: "+err.Error(), started)
+		writeError(c, http.StatusInternalServerError, "list geofences: "+err.Error(), started)
 		return
 	}
 	defer rows.Close()
@@ -91,65 +92,65 @@ func (h Handler) ListGeofences(w http.ResponseWriter, r *http.Request) {
 		var item models.Geofence
 		var rawCoordinates []byte
 		if err := rows.Scan(&item.ID, &item.Name, &item.Description, &rawCoordinates, &item.Category, &item.CreatedAt); err != nil {
-			writeError(w, http.StatusInternalServerError, "read geofence: "+err.Error(), started)
+			writeError(c, http.StatusInternalServerError, "read geofence: "+err.Error(), started)
 			return
 		}
 		if err := json.Unmarshal(rawCoordinates, &item.Coordinates); err != nil {
-			writeError(w, http.StatusInternalServerError, "decode coordinates: "+err.Error(), started)
+			writeError(c, http.StatusInternalServerError, "decode coordinates: "+err.Error(), started)
 			return
 		}
 		geofences = append(geofences, item)
 	}
 	if err := rows.Err(); err != nil {
-		writeError(w, http.StatusInternalServerError, "read geofences: "+err.Error(), started)
+		writeError(c, http.StatusInternalServerError, "read geofences: "+err.Error(), started)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"geofences": geofences}, started)
+	writeJSON(c, http.StatusOK, map[string]any{"geofences": geofences}, started)
 }
 
-func (h Handler) CreateVehicle(w http.ResponseWriter, r *http.Request) {
+func (h Handler) CreateVehicle(c *gin.Context) {
 	started := time.Now()
 	var input models.VehicleRequest
-	if err := decodeJSON(r, &input); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error(), started)
+	if err := decodeJSON(c, &input); err != nil {
+		writeError(c, http.StatusBadRequest, err.Error(), started)
 		return
 	}
 	if err := validateVehicle(input); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error(), started)
+		writeError(c, http.StatusBadRequest, err.Error(), started)
 		return
 	}
 
 	id := uuid.New()
-	if err := h.DB.QueryRow(r.Context(), `
+	if err := h.DB.QueryRow(c.Request.Context(), `
 		INSERT INTO vehicles (id, vehicle_number, driver_name, vehicle_type, phone)
 		VALUES ($1, $2, $3, $4, $5)
 		RETURNING created_at
 	`, id, input.VehicleNumber, input.DriverName, input.VehicleType, input.Phone).Scan(new(time.Time)); err != nil {
 		if strings.Contains(err.Error(), "vehicles_vehicle_number_key") {
-			writeError(w, http.StatusConflict, "vehicle_number already exists", started)
+			writeError(c, http.StatusConflict, "vehicle_number already exists", started)
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "create vehicle: "+err.Error(), started)
+		writeError(c, http.StatusInternalServerError, "create vehicle: "+err.Error(), started)
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, map[string]any{
+	writeJSON(c, http.StatusCreated, map[string]any{
 		"id":             id,
 		"vehicle_number": input.VehicleNumber,
 		"status":         "active",
 	}, started)
 }
 
-func (h Handler) ListVehicles(w http.ResponseWriter, r *http.Request) {
+func (h Handler) ListVehicles(c *gin.Context) {
 	started := time.Now()
-	rows, err := h.DB.Query(r.Context(), `
+	rows, err := h.DB.Query(c.Request.Context(), `
 		SELECT id, vehicle_number, driver_name, vehicle_type, phone, status, created_at
 		FROM vehicles
 		ORDER BY created_at DESC
 	`)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "list vehicles: "+err.Error(), started)
+		writeError(c, http.StatusInternalServerError, "list vehicles: "+err.Error(), started)
 		return
 	}
 	defer rows.Close()
@@ -158,17 +159,17 @@ func (h Handler) ListVehicles(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var item models.Vehicle
 		if err := rows.Scan(&item.ID, &item.VehicleNumber, &item.DriverName, &item.VehicleType, &item.Phone, &item.Status, &item.CreatedAt); err != nil {
-			writeError(w, http.StatusInternalServerError, "read vehicle: "+err.Error(), started)
+			writeError(c, http.StatusInternalServerError, "read vehicle: "+err.Error(), started)
 			return
 		}
 		vehicles = append(vehicles, item)
 	}
 	if err := rows.Err(); err != nil {
-		writeError(w, http.StatusInternalServerError, "read vehicles: "+err.Error(), started)
+		writeError(c, http.StatusInternalServerError, "read vehicles: "+err.Error(), started)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"vehicles": vehicles}, started)
+	writeJSON(c, http.StatusOK, map[string]any{"vehicles": vehicles}, started)
 }
 
 func validateGeofence(input models.GeofenceRequest) error {
@@ -205,8 +206,8 @@ func validateVehicle(input models.VehicleRequest) error {
 	return nil
 }
 
-func decodeJSON(r *http.Request, destination any) error {
-	decoder := json.NewDecoder(r.Body)
+func decodeJSON(c *gin.Context, destination any) error {
+	decoder := json.NewDecoder(c.Request.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(destination); err != nil {
 		return fmt.Errorf("invalid JSON: %w", err)
@@ -214,12 +215,11 @@ func decodeJSON(r *http.Request, destination any) error {
 	return nil
 }
 
-func writeError(w http.ResponseWriter, status int, message string, started time.Time) {
-	writeJSON(w, status, map[string]any{"error": message}, started)
+func writeError(c *gin.Context, status int, message string, started time.Time) {
+	writeJSON(c, status, map[string]any{"error": message}, started)
 }
 
-func writeJSON(w http.ResponseWriter, status int, payload map[string]any, started time.Time) {
+func writeJSON(c *gin.Context, status int, payload map[string]any, started time.Time) {
 	payload["time_ns"] = fmt.Sprintf("%d", time.Since(started).Nanoseconds())
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(payload)
+	c.JSON(status, payload)
 }

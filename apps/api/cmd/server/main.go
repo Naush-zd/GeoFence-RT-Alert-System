@@ -29,7 +29,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              ":" + cfg.APIPort,
-		Handler:           withJSONContentType(routes.New(handlers.New(db))),
+		Handler:           routes.New(handlers.New(db)),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -37,11 +37,4 @@ func main() {
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}
-}
-
-func withJSONContentType(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		next.ServeHTTP(w, r)
-	})
 }
