@@ -112,8 +112,22 @@ curl -X POST http://localhost:8080/geofences \
 
 ```text
 apps/
-  api/   Go HTTP API
+  api/
+    cmd/server/        API composition root
+    internal/handlers/ Gin HTTP and WebSocket adapters
+    internal/services/ business logic and geofence transitions
+    internal/repositories/ GORM/PostgreSQL persistence
+    internal/realtime/ WebSocket hub
   web/   React + Vite frontend
 docker-compose.yml
 package.json
 ```
+
+The backend follows this flow:
+
+```text
+Gin handlers -> services -> repositories/GORM -> PostgreSQL/PostGIS
+```
+
+Handlers decode requests and format responses, services own business rules, and
+repositories own database access.
