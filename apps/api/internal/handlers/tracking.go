@@ -33,7 +33,7 @@ func (h Handler) UpdateVehicleLocation(c *gin.Context) {
 	}
 
 	for _, transition := range result.Transitions {
-		h.broadcastAlert(
+		if err := h.broadcastAlert(
 			c,
 			uuid.MustParse(result.Vehicle.ID),
 			result.Vehicle.VehicleNumber,
@@ -41,7 +41,10 @@ func (h Handler) UpdateVehicleLocation(c *gin.Context) {
 			transition.Geofence,
 			transition.EventType,
 			input,
-		)
+		); err != nil {
+			writeError(c, http.StatusInternalServerError, "record alert: "+err.Error(), started)
+			return
+		}
 	}
 
 	writeJSON(c, http.StatusOK, map[string]any{

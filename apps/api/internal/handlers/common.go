@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -20,10 +18,11 @@ type Handler struct {
 	Geofences *services.GeofenceService
 	Vehicles  *services.VehicleService
 	Tracking  *services.TrackingService
+	Alerts    *services.AlertService
 }
 
-func New(db *gorm.DB, hub *realtime.Hub, geofences *services.GeofenceService, vehicles *services.VehicleService, tracking *services.TrackingService) Handler {
-	return Handler{DB: db, Hub: hub, Geofences: geofences, Vehicles: vehicles, Tracking: tracking}
+func New(db *gorm.DB, hub *realtime.Hub, geofences *services.GeofenceService, vehicles *services.VehicleService, tracking *services.TrackingService, alerts *services.AlertService) Handler {
+	return Handler{DB: db, Hub: hub, Geofences: geofences, Vehicles: vehicles, Tracking: tracking, Alerts: alerts}
 }
 func (h Handler) Health(c *gin.Context) {
 	started := time.Now()
@@ -35,12 +34,6 @@ func (h Handler) Health(c *gin.Context) {
 		return
 	}
 	writeJSON(c, http.StatusOK, map[string]any{"status": "ok"}, started)
-}
-func queryRow(ctx context.Context, db *gorm.DB, query string, args ...any) (*sql.Row, error) {
-	return db.WithContext(ctx).Raw(query, args...).Row(), nil
-}
-func queryRows(ctx context.Context, db *gorm.DB, query string, args ...any) (*sql.Rows, error) {
-	return db.WithContext(ctx).Raw(query, args...).Rows()
 }
 func decodeJSON(c *gin.Context, destination any) error {
 	decoder := json.NewDecoder(c.Request.Body)
