@@ -1,0 +1,21 @@
+{
+  "name": "geofencing-platform",
+  "private": true,
+  "packageManager": "npm@11.20.0",
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "concurrently --kill-others --names api,web \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "cd apps/api && air",
+    "dev:web": "npm run dev --workspace=web",
+    "build": "npm run build --workspace=web",
+    "build:api": "cd apps/api && go build -o bin/server.exe ./cmd/server",
+    "test": "npm run lint --workspace=web && npm run test:api",
+    "test:api": "cd apps/api && go test ./...",
+    "lint": "npm run lint --workspace=web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}

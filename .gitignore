@@ -1,0 +1,16 @@
+node_modules/
+dist/
+apps/api/bin/
+apps/api/tmp/
+
+*.log
+.env
+.env.*
+!.env.example
+
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+*.local
+*.tmp
