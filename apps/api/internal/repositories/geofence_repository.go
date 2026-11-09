@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/yourusername/geofencing-platform/apps/api/internal/geospatial"
 	"github.com/yourusername/geofencing-platform/apps/api/internal/models"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -48,18 +49,51 @@ func (r *GeofenceRepository) Create(ctx context.Context, input models.GeofenceRe
 	if err := r.db.WithContext(ctx).Create(&record).Error; err != nil {
 		return models.Geofence{}, err
 	}
+	wkt, err := geospatial.PolygonWKT(input.Coordinates)
+	if err != nil {
+		return models.Geofence{}, err
+	}
+	if err := r.db.WithContext(ctx).Exec(
+		"UPDATE geofences SET boundary = ST_SetSRID(ST_GeomFromText(?), 4326) WHERE id = ?",
+		wkt,
+		record.ID,
+	).Error; err != nil {
+		return models.Geofence{}, err
+	}
 
 	return toGeofenceModel(record)
 }
 
 func (r *GeofenceRepository) List(ctx context.Context, category string) ([]models.Geofence, error) {
-	query := r.db.WithContext(ctx).Order("created_at DESC")
+	query := r.db.WithContext(ctx).Select("id, name, description, coordinates, category, created_at").Order("created_at DESC")
 	if category != "" {
 		query = query.Where("category = ?", category)
 	}
 
 	var records []geofenceRecord
 	if err := query.Find(&records).Error; err != nil {
+		return nil, err
+	}
+
+	geofences := make([]models.Geofence, 0, len(records))
+	for _, record := range records {
+		geofence, err := toGeofenceModel(record)
+		if err != nil {
+			return nil, err
+		}
+		geofences = append(geofences, geofence)
+	}
+	return geofences, nil
+}
+
+func (r *GeofenceRepository) FindContaining(ctx context.Context, latitude, longitude float64) ([]models.Geofence, error) {
+	var records []geofenceRecord
+	if err := r.db.WithContext(ctx).
+		Select("id, name, description, coordinates, category, created_at").
+		Where("boundary IS NOT NULL").
+		Where("ST_Covers(boundary, ST_SetSRID(ST_Point(?, ?), 4326))", longitude, latitude).
+		Order("created_at DESC").
+		Find(&records).Error; err != nil {
 		return nil, err
 	}
 

@@ -2,7 +2,11 @@ package database
 
 import (
 	"context"
+	"encoding/json"
 
+	"github.com/google/uuid"
+	"github.com/yourusername/geofencing-platform/apps/api/internal/geospatial"
+	"gorm.io/datatypes"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -24,7 +28,10 @@ func New(ctx context.Context, connectionString string) (*gorm.DB, error) {
 }
 
 func Migrate(ctx context.Context, db *gorm.DB) error {
-	return db.WithContext(ctx).Exec(`
+	if err := db.WithContext(ctx).Exec(`CREATE EXTENSION IF NOT EXISTS postgis;`).Error; err != nil {
+		return err
+	}
+	if err := db.WithContext(ctx).Exec(`
 		CREATE TABLE IF NOT EXISTS geofences (
 			id UUID PRIMARY KEY,
 			name TEXT NOT NULL,
@@ -33,6 +40,8 @@ func Migrate(ctx context.Context, db *gorm.DB) error {
 			category TEXT NOT NULL CHECK (category IN ('delivery_zone', 'restricted_zone', 'toll_zone', 'customer_area')),
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		);
+		ALTER TABLE geofences
+			ADD COLUMN IF NOT EXISTS boundary geometry(Polygon, 4326);
 
 		CREATE TABLE IF NOT EXISTS vehicles (
 			id UUID PRIMARY KEY,
@@ -90,7 +99,39 @@ func Migrate(ctx context.Context, db *gorm.DB) error {
 			ON violations (vehicle_id, recorded_at DESC);
 		CREATE INDEX IF NOT EXISTS alert_events_occurred_at_idx
 			ON alert_events (occurred_at DESC);
-	`).Error
+		CREATE INDEX IF NOT EXISTS geofences_boundary_gist_idx
+			ON geofences USING GIST (boundary);
+	`).Error; err != nil {
+		return err
+	}
+
+	var geofences []migrationGeofence
+	if err := db.WithContext(ctx).Table("geofences").Select("id, coordinates").Where("boundary IS NULL").Find(&geofences).Error; err != nil {
+		return err
+	}
+	for _, geofence := range geofences {
+		var coordinates [][]float64
+		if err := json.Unmarshal(geofence.Coordinates, &coordinates); err != nil {
+			continue
+		}
+		wkt, err := geospatial.PolygonWKT(coordinates)
+		if err != nil {
+			continue
+		}
+		if err := db.WithContext(ctx).Exec(
+			"UPDATE geofences SET boundary = ST_SetSRID(ST_GeomFromText(?), 4326) WHERE id = ? AND boundary IS NULL",
+			wkt,
+			geofence.ID,
+		).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type migrationGeofence struct {
+	ID          uuid.UUID      `gorm:"column:id"`
+	Coordinates datatypes.JSON `gorm:"column:coordinates"`
 }
 
 func Close(db *gorm.DB) error {
