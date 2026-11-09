@@ -3,23 +3,28 @@ package database
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
-func New(ctx context.Context, connectionString string) (*pgxpool.Pool, error) {
-	pool, err := pgxpool.New(ctx, connectionString)
+func New(ctx context.Context, connectionString string) (*gorm.DB, error) {
+	db, err := gorm.Open(postgres.Open(connectionString), &gorm.Config{})
 	if err != nil {
 		return nil, err
 	}
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
+	sqlDB, err := db.DB()
+	if err != nil {
 		return nil, err
 	}
-	return pool, nil
+	if err := sqlDB.PingContext(ctx); err != nil {
+		_ = sqlDB.Close()
+		return nil, err
+	}
+	return db, nil
 }
 
-func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
-	_, err := pool.Exec(ctx, `
+func Migrate(ctx context.Context, db *gorm.DB) error {
+	return db.WithContext(ctx).Exec(`
 		CREATE TABLE IF NOT EXISTS geofences (
 			id UUID PRIMARY KEY,
 			name TEXT NOT NULL,
@@ -85,6 +90,21 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 			ON violations (vehicle_id, recorded_at DESC);
 		CREATE INDEX IF NOT EXISTS alert_events_occurred_at_idx
 			ON alert_events (occurred_at DESC);
-	`)
-	return err
+	`).Error
+}
+
+func Close(db *gorm.DB) error {
+	sqlDB, err := db.DB()
+	if err != nil {
+		return err
+	}
+	return sqlDB.Close()
+}
+
+func Ping(ctx context.Context, db *gorm.DB) error {
+	sqlDB, err := db.DB()
+	if err != nil {
+		return err
+	}
+	return sqlDB.PingContext(ctx)
 }

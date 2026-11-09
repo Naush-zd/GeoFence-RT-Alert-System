@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,7 +13,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/yourusername/geofencing-platform/apps/api/internal/models"
 )
 
@@ -43,8 +43,13 @@ func (h Handler) ConfigureAlert(c *gin.Context) {
 	}
 
 	var geofenceName string
-	if err := h.DB.QueryRow(c.Request.Context(), `SELECT name FROM geofences WHERE id = $1`, geofenceID).Scan(&geofenceName); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+	row, err := queryRow(c.Request.Context(), h.DB, `SELECT name FROM geofences WHERE id = $1`, geofenceID)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "find geofence: "+err.Error(), started)
+		return
+	}
+	if err := row.Scan(&geofenceName); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
 			writeError(c, http.StatusNotFound, "geofence not found", started)
 			return
 		}
@@ -53,17 +58,26 @@ func (h Handler) ConfigureAlert(c *gin.Context) {
 	}
 	if vehicleID != nil {
 		var exists bool
-		if err := h.DB.QueryRow(c.Request.Context(), `SELECT EXISTS (SELECT 1 FROM vehicles WHERE id = $1)`, *vehicleID).Scan(&exists); err != nil || !exists {
+		row, err := queryRow(c.Request.Context(), h.DB, `SELECT EXISTS (SELECT 1 FROM vehicles WHERE id = $1)`, *vehicleID)
+		if err != nil {
+			writeError(c, http.StatusInternalServerError, "find vehicle: "+err.Error(), started)
+			return
+		}
+		if err := row.Scan(&exists); err != nil || !exists {
+			if err != nil {
+				writeError(c, http.StatusInternalServerError, "find vehicle: "+err.Error(), started)
+				return
+			}
 			writeError(c, http.StatusNotFound, "vehicle not found", started)
 			return
 		}
 	}
 
 	alertID := uuid.New()
-	if _, err := h.DB.Exec(c.Request.Context(), `
+	if err := h.DB.WithContext(c.Request.Context()).Exec(`
 		INSERT INTO alert_configurations (id, geofence_id, vehicle_id, event_type)
 		VALUES ($1, $2, $3, $4)
-	`, alertID, geofenceID, vehicleID, input.EventType); err != nil {
+	`, alertID, geofenceID, vehicleID, input.EventType).Error; err != nil {
 		writeError(c, http.StatusInternalServerError, "configure alert: "+err.Error(), started)
 		return
 	}
@@ -109,7 +123,7 @@ func (h Handler) ListAlerts(c *gin.Context) {
 	}
 	query += " ORDER BY a.created_at DESC"
 
-	rows, err := h.DB.Query(c.Request.Context(), query, args...)
+	rows, err := queryRows(c.Request.Context(), h.DB, query, args...)
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, "list alerts: "+err.Error(), started)
 		return
@@ -204,11 +218,16 @@ func (h Handler) ListViolations(c *gin.Context) {
 	args = append(args, limit)
 
 	var total int
-	if err := h.DB.QueryRow(c.Request.Context(), countQuery, countArgs...).Scan(&total); err != nil {
+	row, err := queryRow(c.Request.Context(), h.DB, countQuery, countArgs...)
+	if err != nil {
 		writeError(c, http.StatusInternalServerError, "count violations: "+err.Error(), started)
 		return
 	}
-	rows, err := h.DB.Query(c.Request.Context(), query, args...)
+	if err := row.Scan(&total); err != nil {
+		writeError(c, http.StatusInternalServerError, "count violations: "+err.Error(), started)
+		return
+	}
+	rows, err := queryRows(c.Request.Context(), h.DB, query, args...)
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, "list violations: "+err.Error(), started)
 		return
@@ -233,7 +252,7 @@ func (h Handler) broadcastAlert(c *gin.Context, vehicleID uuid.UUID, vehicleNumb
 	}
 
 	var configured bool
-	if err := h.DB.QueryRow(c.Request.Context(), `
+	row, err := queryRow(c.Request.Context(), h.DB, `
 		SELECT EXISTS (
 			SELECT 1
 			FROM alert_configurations
@@ -242,7 +261,11 @@ func (h Handler) broadcastAlert(c *gin.Context, vehicleID uuid.UUID, vehicleNumb
 			  AND (vehicle_id IS NULL OR vehicle_id = $2)
 			  AND (event_type = $3 OR event_type = 'both')
 		)
-	`, geofenceID, vehicleID, eventType).Scan(&configured); err != nil {
+	`, geofenceID, vehicleID, eventType)
+	if err != nil {
+		return err
+	}
+	if err := row.Scan(&configured); err != nil {
 		return err
 	}
 	if !configured {
@@ -267,12 +290,12 @@ func (h Handler) broadcastAlert(c *gin.Context, vehicleID uuid.UUID, vehicleNumb
 	if err != nil {
 		return err
 	}
-	if _, err := h.DB.Exec(c.Request.Context(), `
+	if err := h.DB.WithContext(c.Request.Context()).Exec(`
 		INSERT INTO alert_events (
 			id, vehicle_id, geofence_id, event_type, latitude, longitude, occurred_at, payload
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-	`, event.EventID, vehicleID, geofenceID, eventType, input.Latitude, input.Longitude, input.Timestamp, payload); err != nil {
+	`, event.EventID, vehicleID, geofenceID, eventType, input.Latitude, input.Longitude, input.Timestamp, payload).Error; err != nil {
 		return err
 	}
 

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,7 +10,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/yourusername/geofencing-platform/apps/api/internal/geospatial"
 	"github.com/yourusername/geofencing-platform/apps/api/internal/models"
 )
@@ -29,10 +29,15 @@ func (h Handler) UpdateVehicleLocation(c *gin.Context) {
 
 	var vehicleNumber string
 	var driverName string
-	if err := h.DB.QueryRow(c.Request.Context(), `
+	row, err := queryRow(c.Request.Context(), h.DB, `
 		SELECT vehicle_number, driver_name FROM vehicles WHERE id = $1
-	`, vehicleID).Scan(&vehicleNumber, &driverName); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+	`, vehicleID)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "find vehicle: "+err.Error(), started)
+		return
+	}
+	if err := row.Scan(&vehicleNumber, &driverName); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
 			writeError(c, http.StatusNotFound, "vehicle not found", started)
 			return
 		}
@@ -52,10 +57,10 @@ func (h Handler) UpdateVehicleLocation(c *gin.Context) {
 		return
 	}
 
-	if _, err := h.DB.Exec(c.Request.Context(), `
+	if err := h.DB.WithContext(c.Request.Context()).Exec(`
 		INSERT INTO vehicle_locations (id, vehicle_id, latitude, longitude, recorded_at)
 		VALUES ($1, $2, $3, $4, $5)
-	`, uuid.New(), vehicleID, input.Latitude, input.Longitude, input.Timestamp); err != nil {
+	`, uuid.New(), vehicleID, input.Latitude, input.Longitude, input.Timestamp).Error; err != nil {
 		writeError(c, http.StatusInternalServerError, "store vehicle location: "+err.Error(), started)
 		return
 	}
@@ -109,8 +114,13 @@ func (h Handler) GetVehicleLocation(c *gin.Context) {
 	}
 
 	var vehicleNumber string
-	if err := h.DB.QueryRow(c.Request.Context(), `SELECT vehicle_number FROM vehicles WHERE id = $1`, vehicleID).Scan(&vehicleNumber); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+	row, err := queryRow(c.Request.Context(), h.DB, `SELECT vehicle_number FROM vehicles WHERE id = $1`, vehicleID)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "find vehicle: "+err.Error(), started)
+		return
+	}
+	if err := row.Scan(&vehicleNumber); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
 			writeError(c, http.StatusNotFound, "vehicle not found", started)
 			return
 		}
@@ -119,14 +129,19 @@ func (h Handler) GetVehicleLocation(c *gin.Context) {
 	}
 
 	var location models.LocationRequest
-	if err := h.DB.QueryRow(c.Request.Context(), `
+	row, err = queryRow(c.Request.Context(), h.DB, `
 		SELECT latitude, longitude, recorded_at
 		FROM vehicle_locations
 		WHERE vehicle_id = $1
 		ORDER BY recorded_at DESC
 		LIMIT 1
-	`, vehicleID).Scan(&location.Latitude, &location.Longitude, &location.Timestamp); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+	`, vehicleID)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "get vehicle location: "+err.Error(), started)
+		return
+	}
+	if err := row.Scan(&location.Latitude, &location.Longitude, &location.Timestamp); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
 			writeError(c, http.StatusNotFound, "vehicle has no recorded location", started)
 			return
 		}
@@ -159,7 +174,7 @@ func (h Handler) GetVehicleLocation(c *gin.Context) {
 	}, started)
 }
 func (h Handler) loadGeofences(c *gin.Context) ([]models.Geofence, error) {
-	rows, err := h.DB.Query(c.Request.Context(), `SELECT id, name, coordinates, category FROM geofences`)
+	rows, err := queryRows(c.Request.Context(), h.DB, `SELECT id, name, coordinates, category FROM geofences`)
 	if err != nil {
 		return nil, fmt.Errorf("list geofences: %w", err)
 	}
@@ -181,22 +196,25 @@ func (h Handler) loadGeofences(c *gin.Context) ([]models.Geofence, error) {
 }
 func (h Handler) previousLocation(c *gin.Context, vehicleID uuid.UUID) (float64, float64, bool, error) {
 	var latitude, longitude float64
-	err := h.DB.QueryRow(c.Request.Context(), `
+	row, err := queryRow(c.Request.Context(), h.DB, `
 		SELECT latitude, longitude
 		FROM vehicle_locations
 		WHERE vehicle_id = $1
 		ORDER BY recorded_at DESC
 		LIMIT 1
-	`, vehicleID).Scan(&latitude, &longitude)
-	if errors.Is(err, pgx.ErrNoRows) {
+	`, vehicleID)
+	if err == nil {
+		err = row.Scan(&latitude, &longitude)
+	}
+	if errors.Is(err, sql.ErrNoRows) {
 		return 0, 0, false, nil
 	}
 	return latitude, longitude, err == nil, err
 }
 func (h Handler) recordViolation(c *gin.Context, vehicleID uuid.UUID, geofenceID string, eventType string, input models.LocationRequest) error {
-	_, err := h.DB.Exec(c.Request.Context(), `
+	err := h.DB.WithContext(c.Request.Context()).Exec(`
 		INSERT INTO violations (id, vehicle_id, geofence_id, event_type, latitude, longitude, recorded_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`, uuid.New(), vehicleID, geofenceID, eventType, input.Latitude, input.Longitude, input.Timestamp)
+	`, uuid.New(), vehicleID, geofenceID, eventType, input.Latitude, input.Longitude, input.Timestamp).Error
 	return err
 }

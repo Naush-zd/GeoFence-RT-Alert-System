@@ -1,27 +1,29 @@
 package handlers
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/yourusername/geofencing-platform/apps/api/internal/realtime"
+	"gorm.io/gorm"
 )
 
 type Handler struct {
-	DB  *pgxpool.Pool
+	DB  *gorm.DB
 	Hub *realtime.Hub
 }
 
-func New(db *pgxpool.Pool, hub *realtime.Hub) Handler {
+func New(db *gorm.DB, hub *realtime.Hub) Handler {
 	return Handler{DB: db, Hub: hub}
 }
 func (h Handler) Health(c *gin.Context) {
 	started := time.Now()
-	if err := h.DB.Ping(c.Request.Context()); err != nil {
+	if err := h.DB.WithContext(c.Request.Context()).Exec("SELECT 1").Error; err != nil {
 		writeJSON(c, http.StatusServiceUnavailable, map[string]any{
 			"status": "database_unavailable",
 			"error":  "database is unavailable",
@@ -29,6 +31,12 @@ func (h Handler) Health(c *gin.Context) {
 		return
 	}
 	writeJSON(c, http.StatusOK, map[string]any{"status": "ok"}, started)
+}
+func queryRow(ctx context.Context, db *gorm.DB, query string, args ...any) (*sql.Row, error) {
+	return db.WithContext(ctx).Raw(query, args...).Row(), nil
+}
+func queryRows(ctx context.Context, db *gorm.DB, query string, args ...any) (*sql.Rows, error) {
+	return db.WithContext(ctx).Raw(query, args...).Rows()
 }
 func decodeJSON(c *gin.Context, destination any) error {
 	decoder := json.NewDecoder(c.Request.Body)

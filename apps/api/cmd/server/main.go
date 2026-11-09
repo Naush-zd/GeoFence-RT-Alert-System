@@ -27,7 +27,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("connect to database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		if err := database.Close(db); err != nil {
+			log.Printf("close database: %v", err)
+		}
+	}()
 
 	if err := database.Migrate(context.Background(), db); err != nil {
 		log.Fatalf("run database migrations: %v", err)

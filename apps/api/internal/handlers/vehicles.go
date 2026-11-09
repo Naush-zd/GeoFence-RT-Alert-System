@@ -24,11 +24,16 @@ func (h Handler) CreateVehicle(c *gin.Context) {
 	}
 
 	id := uuid.New()
-	if err := h.DB.QueryRow(c.Request.Context(), `
+	row, err := queryRow(c.Request.Context(), h.DB, `
 		INSERT INTO vehicles (id, vehicle_number, driver_name, vehicle_type, phone)
 		VALUES ($1, $2, $3, $4, $5)
 		RETURNING created_at
-	`, id, input.VehicleNumber, input.DriverName, input.VehicleType, input.Phone).Scan(new(time.Time)); err != nil {
+	`, id, input.VehicleNumber, input.DriverName, input.VehicleType, input.Phone)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "create vehicle: "+err.Error(), started)
+		return
+	}
+	if err := row.Scan(new(time.Time)); err != nil {
 		if strings.Contains(err.Error(), "vehicles_vehicle_number_key") {
 			writeError(c, http.StatusConflict, "vehicle_number already exists", started)
 			return
@@ -45,7 +50,7 @@ func (h Handler) CreateVehicle(c *gin.Context) {
 }
 func (h Handler) ListVehicles(c *gin.Context) {
 	started := time.Now()
-	rows, err := h.DB.Query(c.Request.Context(), `
+	rows, err := queryRows(c.Request.Context(), h.DB, `
 		SELECT id, vehicle_number, driver_name, vehicle_type, phone, status, created_at
 		FROM vehicles
 		ORDER BY created_at DESC

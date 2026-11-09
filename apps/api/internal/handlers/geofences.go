@@ -31,10 +31,10 @@ func (h Handler) CreateGeofence(c *gin.Context) {
 	}
 
 	id := uuid.New()
-	_, err = h.DB.Exec(c.Request.Context(), `
+	err = h.DB.WithContext(c.Request.Context()).Exec(`
 		INSERT INTO geofences (id, name, description, coordinates, category)
 		VALUES ($1, $2, $3, $4, $5)
-	`, id, input.Name, input.Description, coordinates, input.Category)
+	`, id, input.Name, input.Description, coordinates, input.Category).Error
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, "create geofence: "+err.Error(), started)
 		return
@@ -57,7 +57,7 @@ func (h Handler) ListGeofences(c *gin.Context) {
 	}
 	query += " ORDER BY created_at DESC"
 
-	rows, err := h.DB.Query(c.Request.Context(), query, args...)
+	rows, err := queryRows(c.Request.Context(), h.DB, query, args...)
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, "list geofences: "+err.Error(), started)
 		return
