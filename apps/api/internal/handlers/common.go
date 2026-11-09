@@ -18,10 +18,11 @@ type Handler struct {
 	DB        *gorm.DB
 	Hub       *realtime.Hub
 	Geofences *services.GeofenceService
+	Vehicles  *services.VehicleService
 }
 
-func New(db *gorm.DB, hub *realtime.Hub, geofences *services.GeofenceService) Handler {
-	return Handler{DB: db, Hub: hub, Geofences: geofences}
+func New(db *gorm.DB, hub *realtime.Hub, geofences *services.GeofenceService, vehicles *services.VehicleService) Handler {
+	return Handler{DB: db, Hub: hub, Geofences: geofences, Vehicles: vehicles}
 }
 func (h Handler) Health(c *gin.Context) {
 	started := time.Now()
