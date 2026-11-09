@@ -5,6 +5,9 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/yourusername/geofencing-platform/apps/api/internal/config"
@@ -15,16 +18,18 @@ import (
 )
 
 func main() {
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	cfg := config.Load()
 
-	db, err := database.New(ctx, cfg.DatabaseURL)
+	db, err := database.New(context.Background(), cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("connect to database: %v", err)
 	}
 	defer db.Close()
 
-	if err := database.Migrate(ctx, db); err != nil {
+	if err := database.Migrate(context.Background(), db); err != nil {
 		log.Fatalf("run database migrations: %v", err)
 	}
 
@@ -35,7 +40,21 @@ func main() {
 	}
 
 	log.Printf("API listening on http://localhost:%s", cfg.APIPort)
-	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatal(err)
+	serverErrors := make(chan error, 1)
+	go func() {
+		serverErrors <- server.ListenAndServe()
+	}()
+
+	select {
+	case err := <-serverErrors:
+		if !errors.Is(err, http.ErrServerClosed) {
+			log.Fatal(err)
+		}
+	case <-ctx.Done():
+		shutdownContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownContext); err != nil {
+			log.Printf("shutdown API: %v", err)
+		}
 	}
 }
