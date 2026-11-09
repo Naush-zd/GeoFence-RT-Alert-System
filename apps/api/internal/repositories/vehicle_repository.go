@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -57,6 +58,17 @@ func (r *VehicleRepository) List(ctx context.Context) ([]models.Vehicle, error) 
 		vehicles = append(vehicles, toVehicleModel(record))
 	}
 	return vehicles, nil
+}
+
+func (r *VehicleRepository) Get(ctx context.Context, id uuid.UUID) (models.Vehicle, error) {
+	var record vehicleRecord
+	if err := r.db.WithContext(ctx).First(&record, "id = ?", id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return models.Vehicle{}, gorm.ErrRecordNotFound
+		}
+		return models.Vehicle{}, err
+	}
+	return toVehicleModel(record), nil
 }
 
 func toVehicleModel(record vehicleRecord) models.Vehicle {

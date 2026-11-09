@@ -43,9 +43,11 @@ func main() {
 	geofenceService := services.NewGeofenceService(geofenceRepository)
 	vehicleRepository := repositories.NewVehicleRepository(db)
 	vehicleService := services.NewVehicleService(vehicleRepository)
+	trackingRepository := repositories.NewTrackingRepository(db)
+	trackingService := services.NewTrackingService(vehicleRepository, geofenceRepository, trackingRepository)
 	server := &http.Server{
 		Addr:              ":" + cfg.APIPort,
-		Handler:           routes.New(handlers.New(db, realtime.NewHub(), geofenceService, vehicleService)),
+		Handler:           routes.New(handlers.New(db, realtime.NewHub(), geofenceService, vehicleService, trackingService)),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

@@ -1,17 +1,15 @@
 package handlers
 
 import (
-	"database/sql"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/yourusername/geofencing-platform/apps/api/internal/geospatial"
 	"github.com/yourusername/geofencing-platform/apps/api/internal/models"
+	"gorm.io/gorm"
 )
 
 func (h Handler) UpdateVehicleLocation(c *gin.Context) {
@@ -21,90 +19,38 @@ func (h Handler) UpdateVehicleLocation(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, err.Error(), started)
 		return
 	}
-	vehicleID, err := uuid.Parse(input.VehicleID)
-	if err != nil || input.Latitude < -90 || input.Latitude > 90 || input.Longitude < -180 || input.Longitude > 180 || input.Timestamp.IsZero() {
-		writeError(c, http.StatusBadRequest, "vehicle_id, valid coordinates, and timestamp are required", started)
-		return
-	}
 
-	var vehicleNumber string
-	var driverName string
-	row, err := queryRow(c.Request.Context(), h.DB, `
-		SELECT vehicle_number, driver_name FROM vehicles WHERE id = $1
-	`, vehicleID)
+	result, err := h.Tracking.UpdateLocation(c.Request.Context(), input)
 	if err != nil {
-		writeError(c, http.StatusInternalServerError, "find vehicle: "+err.Error(), started)
-		return
-	}
-	if err := row.Scan(&vehicleNumber, &driverName); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(c, http.StatusNotFound, "vehicle not found", started)
-			return
+		status := http.StatusInternalServerError
+		if strings.Contains(err.Error(), "vehicle_id, valid coordinates") {
+			status = http.StatusBadRequest
+		} else if errors.Is(err, gorm.ErrRecordNotFound) {
+			status = http.StatusNotFound
 		}
-		writeError(c, http.StatusInternalServerError, "find vehicle: "+err.Error(), started)
-		return
-	}
-
-	geofences, err := h.loadGeofences(c)
-	if err != nil {
-		writeError(c, http.StatusInternalServerError, err.Error(), started)
+		writeError(c, status, err.Error(), started)
 		return
 	}
 
-	previousLatitude, previousLongitude, hasPrevious, err := h.previousLocation(c, vehicleID)
-	if err != nil {
-		writeError(c, http.StatusInternalServerError, "find previous location: "+err.Error(), started)
-		return
-	}
-
-	if err := h.DB.WithContext(c.Request.Context()).Exec(`
-		INSERT INTO vehicle_locations (id, vehicle_id, latitude, longitude, recorded_at)
-		VALUES ($1, $2, $3, $4, $5)
-	`, uuid.New(), vehicleID, input.Latitude, input.Longitude, input.Timestamp).Error; err != nil {
-		writeError(c, http.StatusInternalServerError, "store vehicle location: "+err.Error(), started)
-		return
-	}
-
-	currentGeofences := make([]models.CurrentGeofence, 0)
-	for _, geofence := range geofences {
-		currentInside := geospatial.PointInPolygon(input.Latitude, input.Longitude, geofence.Coordinates)
-		if currentInside {
-			currentGeofences = append(currentGeofences, models.CurrentGeofence{
-				GeofenceID:   geofence.ID,
-				GeofenceName: geofence.Name,
-				Category:     geofence.Category,
-				Status:       "inside",
-			})
-		}
-
-		previousInside := false
-		if hasPrevious {
-			previousInside = geospatial.PointInPolygon(previousLatitude, previousLongitude, geofence.Coordinates)
-		}
-		if currentInside == previousInside {
-			continue
-		}
-
-		eventType := "entry"
-		if !currentInside {
-			eventType = "exit"
-		}
-		if err := h.recordViolation(c, vehicleID, geofence.ID, eventType, input); err != nil {
-			writeError(c, http.StatusInternalServerError, "record violation: "+err.Error(), started)
-			return
-		}
-		if err := h.broadcastAlert(c, vehicleID, vehicleNumber, driverName, geofence, eventType, input); err != nil {
-			writeError(c, http.StatusInternalServerError, "record alert: "+err.Error(), started)
-			return
-		}
+	for _, transition := range result.Transitions {
+		h.broadcastAlert(
+			c,
+			uuid.MustParse(result.Vehicle.ID),
+			result.Vehicle.VehicleNumber,
+			result.Vehicle.DriverName,
+			transition.Geofence,
+			transition.EventType,
+			input,
+		)
 	}
 
 	writeJSON(c, http.StatusOK, map[string]any{
 		"vehicle_id":        input.VehicleID,
 		"location_updated":  true,
-		"current_geofences": currentGeofences,
+		"current_geofences": result.CurrentGeofences,
 	}, started)
 }
+
 func (h Handler) GetVehicleLocation(c *gin.Context) {
 	started := time.Now()
 	vehicleID, err := uuid.Parse(c.Param("vehicle_id"))
@@ -113,108 +59,20 @@ func (h Handler) GetVehicleLocation(c *gin.Context) {
 		return
 	}
 
-	var vehicleNumber string
-	row, err := queryRow(c.Request.Context(), h.DB, `SELECT vehicle_number FROM vehicles WHERE id = $1`, vehicleID)
+	vehicle, location, currentGeofences, err := h.Tracking.CurrentLocation(c.Request.Context(), vehicleID)
 	if err != nil {
-		writeError(c, http.StatusInternalServerError, "find vehicle: "+err.Error(), started)
-		return
-	}
-	if err := row.Scan(&vehicleNumber); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(c, http.StatusNotFound, "vehicle not found", started)
-			return
+		status := http.StatusInternalServerError
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			status = http.StatusNotFound
 		}
-		writeError(c, http.StatusInternalServerError, "find vehicle: "+err.Error(), started)
+		writeError(c, status, err.Error(), started)
 		return
-	}
-
-	var location models.LocationRequest
-	row, err = queryRow(c.Request.Context(), h.DB, `
-		SELECT latitude, longitude, recorded_at
-		FROM vehicle_locations
-		WHERE vehicle_id = $1
-		ORDER BY recorded_at DESC
-		LIMIT 1
-	`, vehicleID)
-	if err != nil {
-		writeError(c, http.StatusInternalServerError, "get vehicle location: "+err.Error(), started)
-		return
-	}
-	if err := row.Scan(&location.Latitude, &location.Longitude, &location.Timestamp); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(c, http.StatusNotFound, "vehicle has no recorded location", started)
-			return
-		}
-		writeError(c, http.StatusInternalServerError, "get vehicle location: "+err.Error(), started)
-		return
-	}
-	location.VehicleID = vehicleID.String()
-
-	geofences, err := h.loadGeofences(c)
-	if err != nil {
-		writeError(c, http.StatusInternalServerError, err.Error(), started)
-		return
-	}
-	currentGeofences := make([]models.CurrentGeofence, 0)
-	for _, geofence := range geofences {
-		if geospatial.PointInPolygon(location.Latitude, location.Longitude, geofence.Coordinates) {
-			currentGeofences = append(currentGeofences, models.CurrentGeofence{
-				GeofenceID:   geofence.ID,
-				GeofenceName: geofence.Name,
-				Category:     geofence.Category,
-			})
-		}
 	}
 
 	writeJSON(c, http.StatusOK, map[string]any{
-		"vehicle_id":        vehicleID.String(),
-		"vehicle_number":    vehicleNumber,
+		"vehicle_id":        vehicle.ID,
+		"vehicle_number":    vehicle.VehicleNumber,
 		"current_location":  location,
 		"current_geofences": currentGeofences,
 	}, started)
-}
-func (h Handler) loadGeofences(c *gin.Context) ([]models.Geofence, error) {
-	rows, err := queryRows(c.Request.Context(), h.DB, `SELECT id, name, coordinates, category FROM geofences`)
-	if err != nil {
-		return nil, fmt.Errorf("list geofences: %w", err)
-	}
-	defer rows.Close()
-
-	geofences := make([]models.Geofence, 0)
-	for rows.Next() {
-		var item models.Geofence
-		var rawCoordinates []byte
-		if err := rows.Scan(&item.ID, &item.Name, &rawCoordinates, &item.Category); err != nil {
-			return nil, fmt.Errorf("read geofence: %w", err)
-		}
-		if err := json.Unmarshal(rawCoordinates, &item.Coordinates); err != nil {
-			return nil, fmt.Errorf("decode coordinates: %w", err)
-		}
-		geofences = append(geofences, item)
-	}
-	return geofences, rows.Err()
-}
-func (h Handler) previousLocation(c *gin.Context, vehicleID uuid.UUID) (float64, float64, bool, error) {
-	var latitude, longitude float64
-	row, err := queryRow(c.Request.Context(), h.DB, `
-		SELECT latitude, longitude
-		FROM vehicle_locations
-		WHERE vehicle_id = $1
-		ORDER BY recorded_at DESC
-		LIMIT 1
-	`, vehicleID)
-	if err == nil {
-		err = row.Scan(&latitude, &longitude)
-	}
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, 0, false, nil
-	}
-	return latitude, longitude, err == nil, err
-}
-func (h Handler) recordViolation(c *gin.Context, vehicleID uuid.UUID, geofenceID string, eventType string, input models.LocationRequest) error {
-	err := h.DB.WithContext(c.Request.Context()).Exec(`
-		INSERT INTO violations (id, vehicle_id, geofence_id, event_type, latitude, longitude, recorded_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`, uuid.New(), vehicleID, geofenceID, eventType, input.Latitude, input.Longitude, input.Timestamp).Error
-	return err
 }
