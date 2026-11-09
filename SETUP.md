@@ -58,7 +58,9 @@ password `postgres`.
 
 The API applies all required tables automatically on startup, including
 geofences, vehicles, locations, alert configurations, violations, and emitted
-alert events.
+alert events. Geofence boundaries are stored as PostGIS `geometry(Polygon,
+4326)` values with a GiST index, and location checks use PostGIS spatial
+containment queries.
 
 To run the API and database entirely in Docker:
 
