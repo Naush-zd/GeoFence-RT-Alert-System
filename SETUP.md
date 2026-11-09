@@ -58,6 +58,37 @@ docker compose up -d postgres
 The configured local database is `geofencing` on port `5432` with user and
 password `postgres`.
 
+The API applies the initial `geofences` and `vehicles` tables automatically on
+startup. The first implemented endpoints are:
+
+```text
+GET  /healthz
+POST /geofences
+GET  /geofences?category=delivery_zone
+POST /vehicles
+GET  /vehicles
+```
+
+Example request:
+
+```powershell
+$body = @{
+  name = "Downtown Delivery Zone"
+  description = "Main delivery area"
+  coordinates = @(
+    @(37.7749, -122.4194),
+    @(37.7849, -122.4194),
+    @(37.7849, -122.4094),
+    @(37.7749, -122.4094),
+    @(37.7749, -122.4194)
+  )
+  category = "delivery_zone"
+} | ConvertTo-Json
+
+Invoke-RestMethod http://localhost:8080/geofences `
+  -Method Post -ContentType "application/json" -Body $body
+```
+
 ## Repository layout
 
 ```text
