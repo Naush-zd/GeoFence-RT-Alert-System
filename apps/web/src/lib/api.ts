@@ -46,8 +46,17 @@ type ApiResponse = {
   time_ns: string
 }
 
-async function request<T extends ApiResponse>(path: string): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}${path}`)
+type RequestOptions = {
+  method?: "GET" | "POST"
+  body?: unknown
+}
+
+async function request<T extends ApiResponse>(path: string, options: RequestOptions = {}): Promise<T> {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    method: options.method ?? "GET",
+    headers: options.body ? { "Content-Type": "application/json" } : undefined,
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  })
   const payload = (await response.json()) as T & { error?: string }
   if (!response.ok) {
     throw new Error(payload.error ?? `Request failed with status ${response.status}`)
@@ -58,7 +67,25 @@ async function request<T extends ApiResponse>(path: string): Promise<T> {
 export const api = {
   health: () => request<{ status: string; time_ns: string }>("/healthz"),
   geofences: () => request<{ geofences: Geofence[]; time_ns: string }>("/geofences"),
+  createGeofence: (input: {
+    name: string
+    description: string
+    category: string
+    coordinates: number[][]
+  }) => request<{ id: string; name: string; status: string; time_ns: string }>("/geofences", { method: "POST", body: input }),
   vehicles: () => request<{ vehicles: Vehicle[]; time_ns: string }>("/vehicles"),
+  createVehicle: (input: {
+    vehicle_number: string
+    driver_name: string
+    vehicle_type: string
+    phone: string
+  }) => request<{ id: string; vehicle_number: string; status: string; time_ns: string }>("/vehicles", { method: "POST", body: input }),
+  updateVehicleLocation: (input: {
+    vehicle_id: string
+    latitude: number
+    longitude: number
+    timestamp: string
+  }) => request<{ vehicle_id: string; location_updated: boolean; current_geofences: unknown[]; time_ns: string }>("/vehicles/location", { method: "POST", body: input }),
   alerts: () => request<{ alerts: AlertConfig[]; time_ns: string }>("/alerts"),
   violations: () =>
     request<{ violations: Violation[]; total_count: number; time_ns: string }>(

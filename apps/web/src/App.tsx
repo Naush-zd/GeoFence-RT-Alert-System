@@ -15,7 +15,11 @@ import { ThemeProvider } from "./components/theme-provider"
 import { Badge } from "./components/ui/badge"
 import { Button } from "./components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./components/ui/card"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "./components/ui/dialog"
+import { Input } from "./components/ui/input"
+import { Label } from "./components/ui/label"
 import { ScrollArea } from "./components/ui/scroll-area"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select"
 import { Separator } from "./components/ui/separator"
 import {
   Sidebar,
@@ -34,6 +38,8 @@ import {
   SidebarTrigger,
 } from "./components/ui/sidebar"
 import { TooltipProvider } from "./components/ui/tooltip"
+import { OperationsMap } from "./components/operations-map"
+import { api as apiClient } from "./lib/api"
 
 type DashboardData = {
   geofences: Geofence[]
@@ -158,8 +164,8 @@ function App() {
           {error && <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" role="alert">{error}</div>}
           <Routes>
             <Route path="/" element={<OverviewPage data={data} />} />
-            <Route path="/geofences" element={<GeofencesPage geofences={data.geofences} />} />
-            <Route path="/vehicles" element={<VehiclesPage vehicles={data.vehicles} />} />
+            <Route path="/geofences" element={<GeofencesPage geofences={data.geofences} onCreated={() => void loadDashboard()} />} />
+            <Route path="/vehicles" element={<VehiclesPage vehicles={data.vehicles} onCreated={() => void loadDashboard()} />} />
             <Route path="/alerts" element={<AlertsPage alerts={data.alerts} />} />
             <Route path="/violations" element={<ViolationsPage violations={data.violations} total={data.totalViolations} />} />
           </Routes>
@@ -195,13 +201,153 @@ function OverviewPage({ data }: { data: DashboardData }) {
   return <><section className="grid gap-4 py-6 sm:grid-cols-2 xl:grid-cols-4"><MetricCard label="Active geofences" value={data.geofences.length} detail="Configured boundaries" icon={<MapPinned />} /><MetricCard label="Registered vehicles" value={data.vehicles.length} detail="Tracked fleet" icon={<Truck />} /><MetricCard label="Alert rules" value={data.alerts.length} detail="Active configurations" icon={<BellRing />} /><MetricCard label="Violation events" value={data.totalViolations} detail="Recorded history" icon={<AlertTriangle />} /></section><section className="grid gap-4 lg:grid-cols-2"><Panel title="Geofences" description="Configured monitoring boundaries" link="/geofences"><GeofenceList items={data.geofences.slice(0, 4)} /></Panel><Panel title="Fleet" description="Registered vehicles" link="/vehicles"><VehicleList items={data.vehicles.slice(0, 4)} /></Panel><Panel title="Recent violations" description={`${data.totalViolations} total recorded events`} link="/violations"><ViolationList items={data.violations} /></Panel><Panel title="Alert rules" description="Rules watching for transitions" link="/alerts"><AlertList items={data.alerts.slice(0, 4)} /></Panel></section></>
 }
 
-function GeofencesPage({ geofences }: { geofences: Geofence[] }) { return <PageSection title="Geofence registry" count={`${geofences.length} zones`} action="+ New geofence"><ListCard><GeofenceList items={geofences} /></ListCard></PageSection> }
-function VehiclesPage({ vehicles }: { vehicles: Vehicle[] }) { return <PageSection title="Vehicle registry" count={`${vehicles.length} vehicles`} action="+ Register vehicle"><ListCard><VehicleList items={vehicles} /></ListCard></PageSection> }
+function GeofencesPage({ geofences, onCreated }: { geofences: Geofence[]; onCreated: () => void }) {
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [draftCoordinates, setDraftCoordinates] = useState<number[][]>([])
+  return <PageSection title="Geofence registry" count={`${geofences.length} zones`} action="+ New geofence" actionContent={<CreateGeofenceDialog open={dialogOpen} onOpenChange={setDialogOpen} coordinates={draftCoordinates} onCoordinatesChange={setDraftCoordinates} onCreated={onCreated} />}><div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(20rem,0.7fr)]"><Card className="overflow-hidden"><CardHeader><CardTitle>Live boundary map</CardTitle><CardDescription>Saved geofences currently monitored by the system.</CardDescription></CardHeader><CardContent className="p-0"><div className="h-[28rem]"><OperationsMap geofences={geofences} /></div></CardContent></Card><ListCard><GeofenceList items={geofences} /></ListCard></div></PageSection>
+}
+function VehiclesPage({ vehicles, onCreated }: { vehicles: Vehicle[]; onCreated: () => void }) { return <PageSection title="Vehicle registry" count={`${vehicles.length} vehicles`} action="+ Register vehicle" actionContent={<RegisterVehicleDialog onCreated={onCreated} />}><ListCard><VehicleList items={vehicles} /></ListCard></PageSection> }
 function AlertsPage({ alerts }: { alerts: AlertConfig[] }) { return <PageSection title="Alert rules" count={`${alerts.length} rules`} action="+ Configure alert"><ListCard><AlertList items={alerts} /></ListCard></PageSection> }
 function ViolationsPage({ violations, total }: { violations: Violation[]; total: number }) { return <PageSection title="Violation history" count={`${total} total events`} action="Export history" variant="outline"><ListCard><ViolationList items={violations} /></ListCard></PageSection> }
 
-function PageSection({ title, count, action, variant = "default", children }: { title: string; count: string; action: string; variant?: "default" | "outline"; children: ReactNode }) { return <section className="space-y-4 py-6"><div className="flex items-end justify-between gap-4"><div><h2 className="text-lg font-semibold">{title}</h2><p className="text-sm text-muted-foreground">{count}</p></div><Button variant={variant}>{action}</Button></div>{children}</section> }
+function PageSection({ title, count, action, actionContent, children }: { title: string; count: string; action: string; variant?: "default" | "outline"; actionContent?: ReactNode; children: ReactNode }) { return <section className="flex flex-col gap-4 py-6"><div className="flex items-end justify-between gap-4"><div><h2 className="text-lg font-semibold">{title}</h2><p className="text-sm text-muted-foreground">{count}</p></div>{actionContent ?? <Button>{action}</Button>}</div>{children}</section> }
 function ListCard({ children }: { children: ReactNode }) { return <Card><CardContent className="p-2">{children}</CardContent></Card> }
+function CreateGeofenceDialog({
+  open,
+  onOpenChange,
+  coordinates,
+  onCoordinatesChange,
+  onCreated,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  coordinates: number[][]
+  onCoordinatesChange: (coordinates: number[][]) => void
+  onCreated: () => void
+}) {
+  const [name, setName] = useState("")
+  const [description, setDescription] = useState("")
+  const [category, setCategory] = useState("delivery_zone")
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+
+  const reset = () => {
+    setName("")
+    setDescription("")
+    setCategory("delivery_zone")
+    setError(null)
+    onCoordinatesChange([])
+  }
+
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (coordinates.length < 3) {
+      setError("Add at least three points on the map.")
+      return
+    }
+    setSubmitting(true)
+    setError(null)
+    const closedCoordinates = [...coordinates, coordinates[0]]
+    try {
+      await apiClient.createGeofence({ name, description, category, coordinates: closedCoordinates })
+      onCreated()
+      reset()
+      onOpenChange(false)
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Unable to create geofence")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    onOpenChange(nextOpen)
+    if (!nextOpen) reset()
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogTrigger render={<Button />}>+ New geofence</DialogTrigger>
+      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-4xl">
+        <DialogHeader>
+          <DialogTitle>Create geofence</DialogTitle>
+          <DialogDescription>Click three or more points, then drag the handles to resize the polygon.</DialogDescription>
+        </DialogHeader>
+        <form className="flex flex-col gap-4" onSubmit={(event) => void submit(event)}>
+          <div className="overflow-hidden rounded-lg border">
+            <div className="h-72">
+              <OperationsMap
+                geofences={[]}
+                draftCoordinates={coordinates}
+                onAddPoint={(point) => onCoordinatesChange([...coordinates, point])}
+                onMovePoint={(index, point) => onCoordinatesChange(coordinates.map((currentPoint, currentIndex) => currentIndex === index ? point : currentPoint))}
+              />
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-muted-foreground">{coordinates.length} points selected. A closing point will be added automatically.</p>
+            <Button type="button" variant="outline" size="sm" onClick={() => onCoordinatesChange([])} disabled={coordinates.length === 0}>Reset points</Button>
+          </div>
+          <div className="flex flex-col gap-2"><Label htmlFor="geofence-name">Name</Label><Input id="geofence-name" value={name} onChange={(event) => setName(event.target.value)} required placeholder="Downtown delivery zone" /></div>
+          <div className="flex flex-col gap-2"><Label htmlFor="geofence-description">Description</Label><Input id="geofence-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Optional context" /></div>
+          <div className="flex flex-col gap-2"><Label>Category</Label><Select value={category} onValueChange={(value) => setCategory(value ?? "delivery_zone")}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="delivery_zone">Delivery zone</SelectItem><SelectItem value="restricted_zone">Restricted zone</SelectItem><SelectItem value="toll_zone">Toll zone</SelectItem><SelectItem value="customer_area">Customer area</SelectItem></SelectContent></Select></div>
+          {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
+          <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button type="submit" disabled={submitting}>{submitting ? "Creating…" : "Create geofence"}</Button></DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function RegisterVehicleDialog({ onCreated }: { onCreated: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [vehicleNumber, setVehicleNumber] = useState("")
+  const [driverName, setDriverName] = useState("")
+  const [vehicleType, setVehicleType] = useState("truck")
+  const [phone, setPhone] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setSubmitting(true)
+    setError(null)
+    try {
+      await apiClient.createVehicle({ vehicle_number: vehicleNumber, driver_name: driverName, vehicle_type: vehicleType, phone })
+      onCreated()
+      setOpen(false)
+      setVehicleNumber("")
+      setDriverName("")
+      setVehicleType("truck")
+      setPhone("")
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Unable to register vehicle")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger render={<Button />}>+ Register vehicle</DialogTrigger>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Register vehicle</DialogTitle>
+          <DialogDescription>Add a vehicle to the tracked fleet.</DialogDescription>
+        </DialogHeader>
+        <form className="flex flex-col gap-4" onSubmit={(event) => void submit(event)}>
+          <div className="flex flex-col gap-2"><Label htmlFor="vehicle-number">Vehicle number</Label><Input id="vehicle-number" value={vehicleNumber} onChange={(event) => setVehicleNumber(event.target.value)} required placeholder="KA-01-AB-1234" /></div>
+          <div className="flex flex-col gap-2"><Label htmlFor="driver-name">Driver name</Label><Input id="driver-name" value={driverName} onChange={(event) => setDriverName(event.target.value)} required placeholder="John Doe" /></div>
+          <div className="flex flex-col gap-2"><Label>Vehicle type</Label><Select value={vehicleType} onValueChange={(value) => setVehicleType(value ?? "truck")}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="truck">Truck</SelectItem><SelectItem value="van">Van</SelectItem><SelectItem value="car">Car</SelectItem><SelectItem value="motorcycle">Motorcycle</SelectItem></SelectContent></Select></div>
+          <div className="flex flex-col gap-2"><Label htmlFor="driver-phone">Driver phone</Label><Input id="driver-phone" value={phone} onChange={(event) => setPhone(event.target.value)} required placeholder="+1234567890" /></div>
+          {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
+          <DialogFooter><Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button type="submit" disabled={submitting}>{submitting ? "Registering…" : "Register vehicle"}</Button></DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function MetricCard({ label, value, detail, icon }: { label: string; value: number; detail: string; icon: ReactNode }) { return <Card><CardContent className="p-5"><div className="mb-4 flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">{icon}</div><p className="text-sm text-muted-foreground">{label}</p><p className="mt-2 text-3xl font-semibold tracking-tight">{value}</p><p className="mt-1 text-xs text-muted-foreground">{detail}</p></CardContent></Card> }
 function Panel({ title, description, link, children }: { title: string; description: string; link: string; children: ReactNode }) { return <Card><CardHeader className="flex flex-row items-start justify-between gap-4"><div><CardTitle>{title}</CardTitle><CardDescription>{description}</CardDescription></div><Button variant="ghost" size="sm" render={<NavLink to={link} />}>View all</Button></CardHeader><CardContent>{children}</CardContent></Card> }
 function GeofenceList({ items }: { items: Geofence[] }) { return items.length === 0 ? <EmptyState text="No geofences configured yet." /> : <div className="grid gap-2">{items.map((item) => <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/50 p-3" key={item.id}><div className="flex min-w-0 items-center gap-3"><span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary"><MapPinned size={16} /></span><div className="min-w-0"><p className="truncate text-sm font-medium">{item.name}</p><p className="truncate text-xs text-muted-foreground">{item.description || "No description"}</p></div></div><Badge variant="secondary">{item.category.replaceAll("_", " ")}</Badge></div>)}</div> }
