@@ -56,7 +56,7 @@ function OperationsMap({
   onMoveVehicle?: (point: [number, number]) => void
 }) {
   return (
-    <MapContainer center={defaultCenter} zoom={2} scrollWheelZoom doubleClickZoom={false} className="relative z-0 isolate h-full min-h-96 w-full">
+    <MapContainer center={defaultCenter} zoom={2} scrollWheelZoom doubleClickZoom={false} className="relative z-0 isolate h-full w-full">
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
