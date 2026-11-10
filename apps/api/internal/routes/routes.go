@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/yourusername/geofencing-platform/apps/api/internal/handlers"
 )
@@ -8,6 +9,9 @@ import (
 func New(api handlers.Handler) *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Logger(), gin.Recovery())
+	corsConfig := cors.DefaultConfig()
+	corsConfig.AllowAllOrigins = true
+	router.Use(cors.New(corsConfig))
 
 	router.GET("/healthz", api.Health)
 	router.POST("/geofences", api.CreateGeofence)
