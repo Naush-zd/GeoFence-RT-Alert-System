@@ -1,15 +1,96 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { AlertTriangle, BellRing, MapPinned, Play, Truck } from "lucide-react"
-import type { Geofence, Vehicle } from "../lib/api"
+import type { Geofence, Vehicle, VehicleLocation } from "../lib/api"
 import { api as apiClient } from "../lib/api"
 import type { DashboardData } from "../lib/dashboard"
 import { OperationsMap } from "../components/operations-map"
 import { AlertList, GeofenceList, MetricCard, Panel, VehicleList, ViolationList } from "../components/dashboard-widgets"
+import { Badge } from "../components/ui/badge"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card"
 
 export function OverviewPage({ data, onRefresh }: { data: DashboardData; onRefresh: () => Promise<void> }) {
-  return <><section className="grid grid-cols-2 gap-3 py-5 sm:gap-4 xl:grid-cols-4"><MetricCard label="Active geofences" value={data.geofences.length} detail="Configured boundaries" icon={<MapPinned />} /><MetricCard label="Registered vehicles" value={data.vehicles.length} detail="Tracked fleet" icon={<Truck />} /><MetricCard label="Alert rules" value={data.alerts.length} detail="Active configurations" icon={<BellRing />} /><MetricCard label="Violation events" value={data.totalViolations} detail="Recorded history" icon={<AlertTriangle />} /></section><SimulationCard onComplete={onRefresh} /><section className="grid gap-4 py-5 lg:grid-cols-2"><Panel title="Geofences" description="Configured monitoring boundaries" link="/geofences"><GeofenceList items={data.geofences.slice(0, 4)} /></Panel><Panel title="Fleet" description="Registered vehicles" link="/vehicles"><VehicleList items={data.vehicles.slice(0, 4)} /></Panel><Panel title="Recent violations" description={`${data.totalViolations} total recorded events`} link="/violations"><ViolationList items={data.violations.slice(0, 4)} /></Panel><Panel title="Alert rules" description="Rules watching for transitions" link="/alerts"><AlertList items={data.alerts.slice(0, 4)} /></Panel></section></>
+  return <><section className="grid grid-cols-2 gap-3 py-5 sm:gap-4 xl:grid-cols-4"><MetricCard label="Active geofences" value={data.geofences.length} detail="Configured boundaries" icon={<MapPinned />} /><MetricCard label="Registered vehicles" value={data.vehicles.length} detail="Tracked fleet" icon={<Truck />} /><MetricCard label="Alert rules" value={data.alerts.length} detail="Active configurations" icon={<BellRing />} /><MetricCard label="Violation events" value={data.totalViolations} detail="Recorded history" icon={<AlertTriangle />} /></section><LiveOperationsMap geofences={data.geofences} vehicles={data.vehicles} /><SimulationCard onComplete={onRefresh} /><section className="grid gap-4 py-5 lg:grid-cols-2"><Panel title="Geofences" description="Configured monitoring boundaries" link="/geofences"><GeofenceList items={data.geofences.slice(0, 4)} /></Panel><Panel title="Fleet" description="Registered vehicles" link="/vehicles"><VehicleList items={data.vehicles.slice(0, 4)} /></Panel><Panel title="Recent violations" description={`${data.totalViolations} total recorded events`} link="/violations"><ViolationList items={data.violations.slice(0, 4)} /></Panel><Panel title="Alert rules" description="Rules watching for transitions" link="/alerts"><AlertList items={data.alerts.slice(0, 4)} /></Panel></section></>
+}
+
+function LiveOperationsMap({ geofences, vehicles }: { geofences: Geofence[]; vehicles: Vehicle[] }) {
+  const [locationsByVehicle, setLocationsByVehicle] = useState<Record<string, VehicleLocation>>({})
+  const [lastCheckedAt, setLastCheckedAt] = useState<Date | null>(null)
+
+  useEffect(() => {
+    let active = true
+    let fetching = false
+
+    const refreshLocations = async () => {
+      if (fetching) return
+      fetching = true
+      try {
+        const results = await Promise.all(vehicles.map(async (vehicle) => {
+          try {
+            return await apiClient.vehicleLocation(vehicle.id)
+          } catch {
+            return null
+          }
+        }))
+
+        if (!active) return
+        const vehicleIds = new Set(vehicles.map((vehicle) => vehicle.id))
+        setLocationsByVehicle((current) => {
+          const next = Object.fromEntries(Object.entries(current).filter(([id]) => vehicleIds.has(id)))
+          for (const location of results) {
+            if (location) next[location.vehicle_id] = location
+          }
+          return next
+        })
+        setLastCheckedAt(new Date())
+      } finally {
+        fetching = false
+      }
+    }
+
+    void refreshLocations()
+    const intervalId = window.setInterval(() => void refreshLocations(), 5000)
+    return () => {
+      active = false
+      window.clearInterval(intervalId)
+    }
+  }, [vehicles])
+
+  const locations = vehicles.flatMap((vehicle) => {
+    const location = locationsByVehicle[vehicle.id]
+    return location ? [location] : []
+  })
+  const vehicleSummary = vehicles.length === 0
+    ? "No vehicles registered"
+    : `${locations.length} of ${vehicles.length} vehicles located`
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <CardTitle>Live fleet map</CardTitle>
+          <CardDescription>Vehicle positions and configured boundaries · refreshes every 5 seconds</CardDescription>
+        </div>
+        <Badge variant="secondary" className="w-fit">{vehicleSummary}</Badge>
+      </CardHeader>
+      <CardContent className="pt-0">
+        <div className="relative h-80 overflow-hidden rounded-md border sm:h-120">
+          <OperationsMap geofences={geofences} vehicleLocations={locations} fitAll />
+          {geofences.length === 0 && locations.length === 0 && (
+            <div className="pointer-events-none absolute inset-0 z-400 grid place-items-center bg-background/30 p-4">
+              <p className="rounded-md border bg-background/90 px-3 py-2 text-center text-sm text-muted-foreground">
+                Add geofences or report vehicle locations to populate the map.
+              </p>
+            </div>
+          )}
+        </div>
+        <div className="flex flex-col gap-1 pt-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+          <span>Select a vehicle marker for its latest location and boundary status.</span>
+          <span>{lastCheckedAt ? `Last checked ${lastCheckedAt.toLocaleTimeString()}` : "Checking vehicle locations…"}</span>
+        </div>
+      </CardContent>
+    </Card>
+  )
 }
 
 function SimulationCard({ onComplete }: { onComplete: () => Promise<void> }) {
@@ -51,7 +132,7 @@ function SimulationCard({ onComplete }: { onComplete: () => Promise<void> }) {
     } catch (requestError) { setError(requestError instanceof Error ? requestError.message : "Unable to update the simulated vehicle") }
   }
 
-  return <Card><CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><CardTitle>Vehicle alert simulation</CardTitle><CardDescription>Set up a Delhi geofence, then drag the blue vehicle marker from Uttar Pradesh into Delhi and back out to generate entry and exit alerts.</CardDescription></div><Button onClick={() => void run()} disabled={running}><Play data-icon="inline-start" />{running ? "Preparing…" : simulationGeofence ? "Reset simulation" : "Set up Delhi simulation"}</Button></CardHeader>{simulationGeofence && vehiclePosition && <CardContent className="pt-0"><div className="h-[28rem] overflow-hidden rounded-lg border"><OperationsMap geofences={[simulationGeofence]} selectedGeofenceId={simulationGeofence.id} vehiclePosition={vehiclePosition} onMoveVehicle={(point) => void moveVehicle(point)} /></div><p className="mt-3 text-xs text-muted-foreground">Drag the blue marker into the shaded Delhi boundary for entry, then drag it back to Uttar Pradesh for exit.</p></CardContent>}{message && <CardContent className="pt-0"><p className="text-sm text-primary" role="status">{message}</p></CardContent>}{error && <CardContent className="pt-0"><p className="text-sm text-destructive" role="alert">{error}</p></CardContent>}</Card>
+  return <Card><CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><CardTitle>Vehicle alert simulation</CardTitle><CardDescription>Set up a Delhi geofence, then drag the blue vehicle marker from Uttar Pradesh into Delhi and back out to generate entry and exit alerts.</CardDescription></div><Button onClick={() => void run()} disabled={running}><Play data-icon="inline-start" />{running ? "Preparing…" : simulationGeofence ? "Reset simulation" : "Set up Delhi simulation"}</Button></CardHeader>{simulationGeofence && vehiclePosition && <CardContent className="pt-0"><div className="h-112 overflow-hidden rounded-lg border"><OperationsMap geofences={[simulationGeofence]} selectedGeofenceId={simulationGeofence.id} vehiclePosition={vehiclePosition} onMoveVehicle={(point) => void moveVehicle(point)} /></div><p className="mt-3 text-xs text-muted-foreground">Drag the blue marker into the shaded Delhi boundary for entry, then drag it back to Uttar Pradesh for exit.</p></CardContent>}{message && <CardContent className="pt-0"><p className="text-sm text-primary" role="status">{message}</p></CardContent>}{error && <CardContent className="pt-0"><p className="text-sm text-destructive" role="alert">{error}</p></CardContent>}</Card>
 }
 
 async function createDemoGeofence(coordinates: number[][]): Promise<Geofence> {

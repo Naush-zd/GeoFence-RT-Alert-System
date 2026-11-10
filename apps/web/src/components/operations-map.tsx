@@ -1,8 +1,8 @@
-import { MapContainer, Marker, Polygon, TileLayer, useMap, useMapEvents } from "react-leaflet"
+import { MapContainer, Marker, Polygon, Popup, TileLayer, Tooltip, useMap, useMapEvents } from "react-leaflet"
 import { divIcon } from "leaflet"
 import type { LatLngExpression } from "leaflet"
-import type { Geofence } from "../lib/api"
-import { useEffect } from "react"
+import type { Geofence, VehicleLocation } from "../lib/api"
+import { useEffect, useRef } from "react"
 import "leaflet/dist/leaflet.css"
 
 const defaultCenter: LatLngExpression = [20, 0]
@@ -26,14 +26,43 @@ function MapClickCapture({ onAddPoint }: { onAddPoint?: (point: [number, number]
   return null
 }
 
-function MapSelection({ geofence, vehiclePosition }: { geofence?: Geofence; vehiclePosition?: [number, number] }) {
+function MapSelection({
+  geofence,
+  geofences,
+  vehiclePosition,
+  vehicleLocations,
+  fitAll,
+}: {
+  geofence?: Geofence
+  geofences: Geofence[]
+  vehiclePosition?: [number, number]
+  vehicleLocations: VehicleLocation[]
+  fitAll: boolean
+}) {
   const map = useMap()
+  const fittedKey = useRef("")
+  const fitKey = fitAll
+    ? `${geofences.map((item) => item.id).sort().join(",")}|${vehicleLocations.map((item) => item.vehicle_id).sort().join(",")}`
+    : ""
 
   useEffect(() => {
+    if (fitAll) {
+      if (fitKey === fittedKey.current) return
+      const points: [number, number][] = [
+        ...geofences.flatMap((item) => item.coordinates.map(([latitude, longitude]) => [latitude, longitude] as [number, number])),
+        ...vehicleLocations.map((item): [number, number] => [item.current_location.latitude, item.current_location.longitude]),
+        ...(vehiclePosition ? [vehiclePosition] : []),
+      ]
+      if (points.length === 0) return
+      if (points.length === 1) map.setView(points[0], 14)
+      else map.fitBounds(points, { padding: [36, 36], maxZoom: 12 })
+      fittedKey.current = fitKey
+      return
+    }
     if (!geofence || geofence.coordinates.length < 2) return
     const points = vehiclePosition ? [...geofence.coordinates, vehiclePosition] : geofence.coordinates
     map.fitBounds(points as [number, number][], { padding: [32, 32], maxZoom: 10 })
-  }, [geofence, map, vehiclePosition])
+  }, [fitAll, fitKey, geofence, geofences, map, vehicleLocations, vehiclePosition])
 
   return null
 }
@@ -46,6 +75,8 @@ function OperationsMap({
   onMovePoint,
   vehiclePosition,
   onMoveVehicle,
+  vehicleLocations = [],
+  fitAll = false,
 }: {
   geofences: Geofence[]
   selectedGeofenceId?: string | null
@@ -54,6 +85,8 @@ function OperationsMap({
   onMovePoint?: (index: number, point: [number, number]) => void
   vehiclePosition?: [number, number]
   onMoveVehicle?: (point: [number, number]) => void
+  vehicleLocations?: VehicleLocation[]
+  fitAll?: boolean
 }) {
   return (
     <MapContainer center={defaultCenter} zoom={2} scrollWheelZoom doubleClickZoom={false} className="relative z-0 isolate h-full w-full">
@@ -62,7 +95,13 @@ function OperationsMap({
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       <MapClickCapture onAddPoint={onAddPoint} />
-      <MapSelection geofence={geofences.find((geofence) => geofence.id === selectedGeofenceId)} vehiclePosition={vehiclePosition} />
+      <MapSelection
+        geofence={geofences.find((geofence) => geofence.id === selectedGeofenceId)}
+        geofences={geofences}
+        vehiclePosition={vehiclePosition}
+        vehicleLocations={vehicleLocations}
+        fitAll={fitAll}
+      />
       {geofences.map((geofence) => (
         <Polygon
           key={geofence.id}
@@ -91,6 +130,25 @@ function OperationsMap({
             },
           }}
         />
+      ))}
+      {vehicleLocations.map((vehicle) => (
+        <Marker
+          key={vehicle.vehicle_id}
+          position={[vehicle.current_location.latitude, vehicle.current_location.longitude]}
+          icon={vehicleIcon}
+          zIndexOffset={1000}
+        >
+          <Tooltip direction="top" offset={[0, -14]} permanent className="fleet-vehicle-label">{vehicle.vehicle_number}</Tooltip>
+          <Popup>
+            <div className="grid gap-1 text-sm">
+              <strong>{vehicle.vehicle_number}</strong>
+              <span>{vehicle.current_geofences.length > 0
+                ? `Inside ${vehicle.current_geofences.map((item) => item.geofence_name).join(", ")}`
+                : "Outside configured boundaries"}</span>
+              <span className="text-xs text-muted-foreground">Updated {new Date(vehicle.current_location.timestamp).toLocaleTimeString()}</span>
+            </div>
+          </Popup>
+        </Marker>
       ))}
       {vehiclePosition && (
         <Marker
