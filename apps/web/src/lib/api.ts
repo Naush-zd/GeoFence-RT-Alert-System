@@ -42,6 +42,14 @@ export type Violation = {
   timestamp: string
 }
 
+export type ViolationFilters = {
+  vehicle_id?: string
+  geofence_id?: string
+  start_date?: string
+  end_date?: string
+  limit?: number
+}
+
 export type CurrentGeofence = {
   geofence_id: string
   geofence_name: string
@@ -121,9 +129,9 @@ export const api = {
     event_type: "entry" | "exit" | "both"
   }) => request<{ alert_id: string; geofence_id: string; vehicle_id: string; event_type: string; status: string; time_ns: string }>("/alerts/configure", { method: "POST", body: input }),
   alerts: () => request<{ alerts: AlertConfig[]; time_ns: string }>("/alerts"),
-  violations: (filters: { vehicle_id?: string; geofence_id?: string; start_date?: string; end_date?: string; limit?: number } = {}) =>
+  violations: (filters: ViolationFilters = {}) =>
     request<{ violations: Violation[]; total_count: number; time_ns: string }>(
-      `/violations/history?${new URLSearchParams(Object.entries({ ...filters, limit: filters.limit ?? 50 }).filter(([, value]) => value !== undefined && value !== ""))}`,
+      `/violations/history?${new URLSearchParams(Object.entries({ ...filters, limit: filters.limit ?? 50 }).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]))}`,
     ),
 }
 

@@ -23,6 +23,7 @@ import {
   SidebarTrigger,
 } from "./ui/sidebar"
 import { pageDescriptions, type DashboardData } from "../lib/dashboard"
+import type { AlertEvent } from "../lib/api"
 import { useLocation } from "react-router-dom"
 import { LiveAlerts } from "./live-alerts"
 
@@ -45,9 +46,9 @@ function PageHeader({ data, loading, onRefresh }: { data: DashboardData; loading
   )
 }
 
-function AppLayout({ data, loading, error, onRefresh, children }: { data: DashboardData; loading: boolean; error: string | null; onRefresh: () => void; children: ReactNode }) {
+function AppLayout({ data, loading, error, onRefresh, onAlertEvent, children }: { data: DashboardData; loading: boolean; error: string | null; onRefresh: () => void; onAlertEvent: (event: AlertEvent) => void; children: ReactNode }) {
   return (
-    <><LiveAlerts /><SidebarProvider defaultOpen={false}>
+    <><LiveAlerts onEvent={onAlertEvent} /><SidebarProvider defaultOpen={false}>
       <Sidebar collapsible="icon" variant="sidebar">
         <SidebarHeader className="p-3"><div className="flex items-center gap-2 px-1"><div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground"><Radio size={18} /></div><div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden"><span className="truncate font-semibold text-sidebar-foreground">GeoFence</span><span className="truncate text-xs text-sidebar-foreground/60">Control center</span></div></div></SidebarHeader>
         <SidebarSeparator />

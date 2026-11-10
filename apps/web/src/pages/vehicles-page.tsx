@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import type { Vehicle } from "../lib/api"
 import { api as apiClient } from "../lib/api"
+import { Badge } from "../components/ui/badge"
 import { Button } from "../components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog"
 import { Input } from "../components/ui/input"

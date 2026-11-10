@@ -16,6 +16,21 @@ npm install
 go mod download -C apps/api
 ```
 
+To install Air globally for Go live reloading:
+
+```sh
+go install github.com/air-verse/air@latest
+```
+
+If the `air` command is not found, add Go's bin directory to your zsh `PATH`:
+
+```sh
+echo 'export PATH="$(go env GOPATH)/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+Verify the installation with `air --version`.
+
 ## Start the applications
 
 Run both the Go API and React frontend:
