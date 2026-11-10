@@ -1,4 +1,5 @@
-const apiBaseUrl = import.meta.env.VITE_API_URL ?? "/api"
+const configuredApiUrl = import.meta.env.VITE_API_URL as string | undefined
+const apiBaseUrl = import.meta.env.PROD ? "/api" : configuredApiUrl ?? "/api"
 
 export type Geofence = {
   id: string
@@ -136,9 +137,9 @@ export const api = {
 }
 
 export function alertsWebSocketUrl(): string {
-  const configuredUrl = import.meta.env.VITE_API_URL as string | undefined
-  if (configuredUrl?.startsWith("http")) {
-    return configuredUrl.replace(/^http/, "ws") + "/ws/alerts"
+  if (!import.meta.env.PROD && configuredApiUrl?.startsWith("http")) {
+    return configuredApiUrl.replace(/^http/, "ws") + "/ws/alerts"
   }
-  return `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/api/ws/alerts`
+  const websocketProtocol = window.location.protocol === "https:" ? "wss:" : "ws:"
+  return `${websocketProtocol}//${window.location.host}${apiBaseUrl}/ws/alerts`
 }
