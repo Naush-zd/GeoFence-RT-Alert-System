@@ -1,5 +1,13 @@
 # Full-Stack Developer Assessment: Geofencing & Real-time Alert System
 
+## Live Deployment
+
+- **Web app:** https://geo-fence-rt-alert-system.vercel.app/
+- **API:** https://geofence-rt-alert-system.onrender.com
+- **API health:** https://geofence-rt-alert-system.onrender.com/healthz
+
+The hosted database may be empty. Use **Set up Delhi simulation** on the Overview page to create sample geofence, vehicle, and alert data.
+
 ## 📋 Overview
 
 This assessment evaluates your ability to build a complete full-stack application with real-time capabilities. You will develop:
