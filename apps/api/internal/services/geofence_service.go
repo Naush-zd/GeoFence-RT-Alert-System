@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"github.com/google/uuid"
 	"strings"
 
 	"github.com/yourusername/geofencing-platform/apps/api/internal/models"
@@ -26,6 +27,14 @@ func (s *GeofenceService) Create(ctx context.Context, input models.GeofenceReque
 
 func (s *GeofenceService) List(ctx context.Context, category string) ([]models.Geofence, error) {
 	return s.repository.List(ctx, category)
+}
+
+func (s *GeofenceService) Delete(ctx context.Context, value string) error {
+	id, err := uuid.Parse(value)
+	if err != nil {
+		return errors.New("invalid geofence_id")
+	}
+	return s.repository.Delete(ctx, id)
 }
 
 func ValidateGeofence(input models.GeofenceRequest) error {

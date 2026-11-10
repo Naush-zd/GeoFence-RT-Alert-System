@@ -86,6 +86,17 @@ func (r *GeofenceRepository) List(ctx context.Context, category string) ([]model
 	return geofences, nil
 }
 
+func (r *GeofenceRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	result := r.db.WithContext(ctx).Delete(&geofenceRecord{}, "id = ?", id)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
 func (r *GeofenceRepository) FindContaining(ctx context.Context, latitude, longitude float64) ([]models.Geofence, error) {
 	var records []geofenceRecord
 	if err := r.db.WithContext(ctx).

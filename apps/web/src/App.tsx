@@ -6,8 +6,10 @@ import {
   BellRing,
   CircleGauge,
   MapPinned,
+  Play,
   Radio,
   Truck,
+  Trash2,
 } from "lucide-react"
 import { api, type AlertConfig, type Geofence, type Vehicle, type Violation } from "./lib/api"
 import { ModeToggle } from "./components/mode-toggle"
@@ -163,7 +165,7 @@ function App() {
           <PageHeader data={data} loading={loading} onRefresh={() => void loadDashboard()} />
           {error && <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" role="alert">{error}</div>}
           <Routes>
-            <Route path="/" element={<OverviewPage data={data} />} />
+            <Route path="/" element={<OverviewPage data={data} onRefresh={loadDashboard} />} />
             <Route path="/geofences" element={<GeofencesPage geofences={data.geofences} onCreated={() => void loadDashboard()} />} />
             <Route path="/vehicles" element={<VehiclesPage vehicles={data.vehicles} onCreated={() => void loadDashboard()} />} />
             <Route path="/alerts" element={<AlertsPage alerts={data.alerts} />} />
@@ -197,14 +199,78 @@ const pageDescriptions: Record<string, string> = {
   "/violations": "Review historical entries and exits across your zones.",
 }
 
-function OverviewPage({ data }: { data: DashboardData }) {
-  return <><section className="grid gap-4 py-6 sm:grid-cols-2 xl:grid-cols-4"><MetricCard label="Active geofences" value={data.geofences.length} detail="Configured boundaries" icon={<MapPinned />} /><MetricCard label="Registered vehicles" value={data.vehicles.length} detail="Tracked fleet" icon={<Truck />} /><MetricCard label="Alert rules" value={data.alerts.length} detail="Active configurations" icon={<BellRing />} /><MetricCard label="Violation events" value={data.totalViolations} detail="Recorded history" icon={<AlertTriangle />} /></section><section className="grid gap-4 lg:grid-cols-2"><Panel title="Geofences" description="Configured monitoring boundaries" link="/geofences"><GeofenceList items={data.geofences.slice(0, 4)} /></Panel><Panel title="Fleet" description="Registered vehicles" link="/vehicles"><VehicleList items={data.vehicles.slice(0, 4)} /></Panel><Panel title="Recent violations" description={`${data.totalViolations} total recorded events`} link="/violations"><ViolationList items={data.violations} /></Panel><Panel title="Alert rules" description="Rules watching for transitions" link="/alerts"><AlertList items={data.alerts.slice(0, 4)} /></Panel></section></>
+function OverviewPage({ data, onRefresh }: { data: DashboardData; onRefresh: () => Promise<void> }) {
+  return <><section className="grid gap-4 py-6 sm:grid-cols-2 xl:grid-cols-4"><MetricCard label="Active geofences" value={data.geofences.length} detail="Configured boundaries" icon={<MapPinned />} /><MetricCard label="Registered vehicles" value={data.vehicles.length} detail="Tracked fleet" icon={<Truck />} /><MetricCard label="Alert rules" value={data.alerts.length} detail="Active configurations" icon={<BellRing />} /><MetricCard label="Violation events" value={data.totalViolations} detail="Recorded history" icon={<AlertTriangle />} /></section><SimulationCard onComplete={onRefresh} /><section className="grid gap-4 lg:grid-cols-2"><Panel title="Geofences" description="Configured monitoring boundaries" link="/geofences"><GeofenceList items={data.geofences.slice(0, 4)} /></Panel><Panel title="Fleet" description="Registered vehicles" link="/vehicles"><VehicleList items={data.vehicles.slice(0, 4)} /></Panel><Panel title="Recent violations" description={`${data.totalViolations} total recorded events`} link="/violations"><ViolationList items={data.violations} /></Panel><Panel title="Alert rules" description="Rules watching for transitions" link="/alerts"><AlertList items={data.alerts.slice(0, 4)} /></Panel></section></>
+}
+
+function SimulationCard({ onComplete }: { onComplete: () => Promise<void> }) {
+  const [running, setRunning] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const run = async () => {
+    setRunning(true)
+    setMessage(null)
+    setError(null)
+    try {
+      const demoCoordinates = [[20, 0], [20.1, 0], [20.1, 0.1], [20, 0.1], [20, 0]]
+      const [currentGeofences, currentVehicles] = await Promise.all([apiClient.geofences(), apiClient.vehicles()])
+      const existingGeofence = currentGeofences.geofences.find((item) => item.name === "Demo delivery boundary")
+      const geofence = existingGeofence ? existingGeofence : await apiClient.createGeofence({
+        name: "Demo delivery boundary",
+        description: "Seeded boundary for the vehicle alert walkthrough.",
+        category: "delivery_zone",
+        coordinates: demoCoordinates,
+      }).then((result) => ({ id: result.id, name: result.name }))
+      const existingVehicle = currentVehicles.vehicles.find((item) => item.vehicle_number === "DEMO-001")
+      const vehicle = existingVehicle ? existingVehicle : await apiClient.createVehicle({
+        vehicle_number: "DEMO-001",
+        driver_name: "Simulation Driver",
+        vehicle_type: "van",
+        phone: "+0000000000",
+      }).then((result) => ({ id: result.id, vehicle_number: result.vehicle_number }))
+      const currentAlerts = await apiClient.alerts()
+      const hasDemoAlert = currentAlerts.alerts.some((alert) => alert.geofence_id === geofence.id && alert.vehicle_id === vehicle.id && alert.event_type === "both")
+      if (!hasDemoAlert) await apiClient.configureAlert({ geofence_id: geofence.id, vehicle_id: vehicle.id, event_type: "both" })
+
+      const baseTime = Date.now()
+      const route = [
+        { latitude: 19.9, longitude: -0.1 },
+        { latitude: 20.05, longitude: 0.05 },
+        { latitude: 19.9, longitude: -0.1 },
+      ]
+      for (const [index, point] of route.entries()) {
+        await apiClient.updateVehicleLocation({
+          vehicle_id: vehicle.id,
+          ...point,
+          timestamp: new Date(baseTime + index * 1000).toISOString(),
+        })
+      }
+      await onComplete()
+      setMessage("Simulation complete: DEMO-001 entered and exited the demo boundary.")
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Unable to run the simulation")
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  return <Card><CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><CardTitle>Vehicle alert simulation</CardTitle><CardDescription>Seed a demo boundary and vehicle, then replay an outside → inside → outside route to generate entry and exit alerts.</CardDescription></div><Button onClick={() => void run()} disabled={running}><Play data-icon="inline-start" />{running ? "Running…" : "Run demo simulation"}</Button></CardHeader>{message && <CardContent className="pt-0"><p className="text-sm text-primary" role="status">{message}</p></CardContent>}{error && <CardContent className="pt-0"><p className="text-sm text-destructive" role="alert">{error}</p></CardContent>}</Card>
 }
 
 function GeofencesPage({ geofences, onCreated }: { geofences: Geofence[]; onCreated: () => void }) {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [draftCoordinates, setDraftCoordinates] = useState<number[][]>([])
-  return <PageSection title="Geofence registry" count={`${geofences.length} zones`} action="+ New geofence" actionContent={<CreateGeofenceDialog open={dialogOpen} onOpenChange={setDialogOpen} coordinates={draftCoordinates} onCoordinatesChange={setDraftCoordinates} onCreated={onCreated} />}><div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(20rem,0.7fr)]"><Card className="overflow-hidden"><CardHeader><CardTitle>Live boundary map</CardTitle><CardDescription>Saved geofences currently monitored by the system.</CardDescription></CardHeader><CardContent className="p-0"><div className="h-[28rem]"><OperationsMap geofences={geofences} /></div></CardContent></Card><ListCard><GeofenceList items={geofences} /></ListCard></div></PageSection>
+  const [selectedGeofenceId, setSelectedGeofenceId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Geofence | null>(null)
+
+  useEffect(() => {
+    if (selectedGeofenceId && !geofences.some((geofence) => geofence.id === selectedGeofenceId)) {
+      setSelectedGeofenceId(null)
+    }
+  }, [geofences, selectedGeofenceId])
+
+  return <PageSection title="Geofence registry" count={`${geofences.length} zones`} action="+ New geofence" actionContent={<><CreateGeofenceDialog open={dialogOpen} onOpenChange={setDialogOpen} coordinates={draftCoordinates} onCoordinatesChange={setDraftCoordinates} onCreated={onCreated} /><DeleteGeofenceDialog target={deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null) }} onDeleted={() => { setDeleteTarget(null); setSelectedGeofenceId(null); onCreated() }} /></>}><div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(20rem,0.7fr)]"><Card className="overflow-hidden"><CardHeader><CardTitle>Live boundary map</CardTitle><CardDescription>Select a boundary to focus and highlight it on the map.</CardDescription></CardHeader><CardContent className="p-0"><div className="h-[28rem]"><OperationsMap geofences={geofences} selectedGeofenceId={selectedGeofenceId} /></div></CardContent></Card><Card><CardHeader><CardTitle>Configured boundaries</CardTitle><CardDescription>Choose a geofence to inspect or remove it from monitoring.</CardDescription></CardHeader><CardContent className="pt-0"><GeofenceList items={geofences} selectedId={selectedGeofenceId} onSelect={setSelectedGeofenceId} onDelete={setDeleteTarget} /></CardContent></Card></div></PageSection>
 }
 function VehiclesPage({ vehicles, onCreated }: { vehicles: Vehicle[]; onCreated: () => void }) { return <PageSection title="Vehicle registry" count={`${vehicles.length} vehicles`} action="+ Register vehicle" actionContent={<RegisterVehicleDialog onCreated={onCreated} />}><ListCard><VehicleList items={vehicles} /></ListCard></PageSection> }
 function AlertsPage({ alerts }: { alerts: AlertConfig[] }) { return <PageSection title="Alert rules" count={`${alerts.length} rules`} action="+ Configure alert"><ListCard><AlertList items={alerts} /></ListCard></PageSection> }
@@ -350,7 +416,28 @@ function RegisterVehicleDialog({ onCreated }: { onCreated: () => void }) {
 
 function MetricCard({ label, value, detail, icon }: { label: string; value: number; detail: string; icon: ReactNode }) { return <Card><CardContent className="p-5"><div className="mb-4 flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">{icon}</div><p className="text-sm text-muted-foreground">{label}</p><p className="mt-2 text-3xl font-semibold tracking-tight">{value}</p><p className="mt-1 text-xs text-muted-foreground">{detail}</p></CardContent></Card> }
 function Panel({ title, description, link, children }: { title: string; description: string; link: string; children: ReactNode }) { return <Card><CardHeader className="flex flex-row items-start justify-between gap-4"><div><CardTitle>{title}</CardTitle><CardDescription>{description}</CardDescription></div><Button variant="ghost" size="sm" render={<NavLink to={link} />}>View all</Button></CardHeader><CardContent>{children}</CardContent></Card> }
-function GeofenceList({ items }: { items: Geofence[] }) { return items.length === 0 ? <EmptyState text="No geofences configured yet." /> : <div className="grid gap-2">{items.map((item) => <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/50 p-3" key={item.id}><div className="flex min-w-0 items-center gap-3"><span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary"><MapPinned size={16} /></span><div className="min-w-0"><p className="truncate text-sm font-medium">{item.name}</p><p className="truncate text-xs text-muted-foreground">{item.description || "No description"}</p></div></div><Badge variant="secondary">{item.category.replaceAll("_", " ")}</Badge></div>)}</div> }
+function GeofenceList({ items, selectedId, onSelect, onDelete }: { items: Geofence[]; selectedId?: string | null; onSelect?: (id: string) => void; onDelete?: (geofence: Geofence) => void }) { return items.length === 0 ? <EmptyState text="No geofences configured yet." /> : <div className="grid gap-2 overflow-hidden">{items.map((item) => { const selected = item.id === selectedId; return <div className={`grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border p-2 transition-colors ${selected ? "border-primary bg-primary/10" : "border-transparent bg-muted/50"}`} key={item.id}><Button type="button" variant="ghost" className="w-full min-w-0 justify-start gap-3 overflow-hidden px-2 text-left" aria-pressed={selected} onClick={() => onSelect?.(item.id)}><span className={`flex size-8 shrink-0 items-center justify-center rounded-md ${selected ? "bg-primary text-primary-foreground" : "bg-primary/15 text-primary"}`}><MapPinned /></span><span className="min-w-0 flex-1 overflow-hidden"><span className="block truncate text-sm font-medium" title={item.name}>{item.name}</span><span className="block truncate text-xs text-muted-foreground" title={item.description || "No description"}>{item.description || "No description"}</span></span></Button><div className="flex shrink-0 items-center gap-1"><Badge variant="secondary" className="hidden md:inline-flex">{item.category.replaceAll("_", " ")}</Badge><Button type="button" variant="ghost" size="icon" aria-label={`Remove ${item.name}`} onClick={() => onDelete?.(item)}><Trash2 data-icon="inline-start" /></Button></div></div> })}</div> }
+
+function DeleteGeofenceDialog({ target, onOpenChange, onDeleted }: { target: Geofence | null; onOpenChange: (open: boolean) => void; onDeleted: () => void }) {
+  const [error, setError] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
+  const remove = async () => {
+    if (!target) return
+    setDeleting(true)
+    setError(null)
+    try {
+      await apiClient.deleteGeofence(target.id)
+      onDeleted()
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Unable to remove geofence")
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  return <Dialog open={Boolean(target)} onOpenChange={onOpenChange}><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Remove geofence?</DialogTitle><DialogDescription>This removes {target?.name ?? "this boundary"} and its related alert configurations and violation history.</DialogDescription></DialogHeader>{error && <p className="text-sm text-destructive" role="alert">{error}</p>}<DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button type="button" variant="destructive" onClick={() => void remove()} disabled={deleting}>{deleting ? "Removing…" : "Remove geofence"}</Button></DialogFooter></DialogContent></Dialog>
+}
 function VehicleList({ items }: { items: Vehicle[] }) { return items.length === 0 ? <EmptyState text="No vehicles registered yet." /> : <div className="grid gap-2">{items.map((item) => <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/50 p-3" key={item.id}><div className="flex min-w-0 items-center gap-3"><span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary"><Truck size={16} /></span><div className="min-w-0"><p className="truncate text-sm font-medium">{item.vehicle_number}</p><p className="truncate text-xs text-muted-foreground">{item.driver_name} · {item.vehicle_type}</p></div></div><Badge>{item.status}</Badge></div>)}</div> }
 function AlertList({ items }: { items: AlertConfig[] }) { return items.length === 0 ? <EmptyState text="No alert rules configured." /> : <div className="grid gap-2">{items.map((item) => <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/50 p-3" key={item.alert_id}><div className="flex min-w-0 items-center gap-3"><span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary"><BellRing size={16} /></span><div className="min-w-0"><p className="truncate text-sm font-medium">{item.geofence_name}</p><p className="truncate text-xs text-muted-foreground">{item.vehicle_number || "All vehicles"} · {item.event_type}</p></div></div><Badge>{item.status}</Badge></div>)}</div> }
 function ViolationList({ items }: { items: Violation[] }) { return items.length === 0 ? <EmptyState text="No violation events recorded." /> : <div className="grid gap-2">{items.map((item) => <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/50 p-3" key={item.id}><div className="flex min-w-0 items-center gap-3"><span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-destructive/15 text-destructive"><AlertTriangle size={16} /></span><div className="min-w-0"><p className="truncate text-sm font-medium">{item.geofence_name}</p><p className="truncate text-xs text-muted-foreground">{item.vehicle_number} · {formatDate(item.timestamp)}</p></div></div><Badge variant="destructive">{item.event_type}</Badge></div>)}</div> }

@@ -47,7 +47,7 @@ type ApiResponse = {
 }
 
 type RequestOptions = {
-  method?: "GET" | "POST"
+  method?: "GET" | "POST" | "DELETE"
   body?: unknown
 }
 
@@ -73,6 +73,7 @@ export const api = {
     category: string
     coordinates: number[][]
   }) => request<{ id: string; name: string; status: string; time_ns: string }>("/geofences", { method: "POST", body: input }),
+  deleteGeofence: (geofenceId: string) => request<{ status: string; geofence_id: string; time_ns: string }>(`/geofences/${geofenceId}`, { method: "DELETE" }),
   vehicles: () => request<{ vehicles: Vehicle[]; time_ns: string }>("/vehicles"),
   createVehicle: (input: {
     vehicle_number: string
@@ -86,6 +87,11 @@ export const api = {
     longitude: number
     timestamp: string
   }) => request<{ vehicle_id: string; location_updated: boolean; current_geofences: unknown[]; time_ns: string }>("/vehicles/location", { method: "POST", body: input }),
+  configureAlert: (input: {
+    geofence_id: string
+    vehicle_id: string
+    event_type: "entry" | "exit" | "both"
+  }) => request<{ alert_id: string; geofence_id: string; vehicle_id: string; event_type: string; status: string; time_ns: string }>("/alerts/configure", { method: "POST", body: input }),
   alerts: () => request<{ alerts: AlertConfig[]; time_ns: string }>("/alerts"),
   violations: () =>
     request<{ violations: Violation[]; total_count: number; time_ns: string }>(

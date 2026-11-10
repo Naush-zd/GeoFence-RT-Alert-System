@@ -12,6 +12,7 @@ func New(api handlers.Handler) *gin.Engine {
 	router.GET("/healthz", api.Health)
 	router.POST("/geofences", api.CreateGeofence)
 	router.GET("/geofences", api.ListGeofences)
+	router.DELETE("/geofences/:geofence_id", api.DeleteGeofence)
 	router.POST("/vehicles", api.CreateVehicle)
 	router.GET("/vehicles", api.ListVehicles)
 	router.POST("/vehicles/location", api.UpdateVehicleLocation)

@@ -1,7 +1,8 @@
-import { MapContainer, Marker, Polygon, TileLayer, useMapEvents } from "react-leaflet"
+import { MapContainer, Marker, Polygon, TileLayer, useMap, useMapEvents } from "react-leaflet"
 import { divIcon } from "leaflet"
 import type { LatLngExpression } from "leaflet"
 import type { Geofence } from "../lib/api"
+import { useEffect } from "react"
 import "leaflet/dist/leaflet.css"
 
 const defaultCenter: LatLngExpression = [20, 0]
@@ -19,13 +20,26 @@ function MapClickCapture({ onAddPoint }: { onAddPoint?: (point: [number, number]
   return null
 }
 
+function MapSelection({ geofence }: { geofence?: Geofence }) {
+  const map = useMap()
+
+  useEffect(() => {
+    if (!geofence || geofence.coordinates.length < 2) return
+    map.fitBounds(geofence.coordinates as [number, number][], { padding: [32, 32], maxZoom: 14 })
+  }, [geofence, map])
+
+  return null
+}
+
 function OperationsMap({
   geofences,
+  selectedGeofenceId,
   draftCoordinates = [],
   onAddPoint,
   onMovePoint,
 }: {
   geofences: Geofence[]
+  selectedGeofenceId?: string | null
   draftCoordinates?: number[][]
   onAddPoint?: (point: [number, number]) => void
   onMovePoint?: (index: number, point: [number, number]) => void
@@ -37,11 +51,14 @@ function OperationsMap({
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       <MapClickCapture onAddPoint={onAddPoint} />
+      <MapSelection geofence={geofences.find((geofence) => geofence.id === selectedGeofenceId)} />
       {geofences.map((geofence) => (
         <Polygon
           key={geofence.id}
           positions={geofence.coordinates as LatLngExpression[]}
-          pathOptions={{ color: "var(--primary)", fillColor: "var(--primary)", fillOpacity: 0.18 }}
+          pathOptions={geofence.id === selectedGeofenceId
+            ? { color: "var(--ring)", fillColor: "var(--primary)", fillOpacity: 0.34, weight: 4 }
+            : { color: "var(--primary)", fillColor: "var(--primary)", fillOpacity: 0.18 }}
         />
       ))}
       {draftCoordinates.length > 2 && (
