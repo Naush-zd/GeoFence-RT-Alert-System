@@ -42,6 +42,33 @@ export type Violation = {
   timestamp: string
 }
 
+export type CurrentGeofence = {
+  geofence_id: string
+  geofence_name: string
+  category?: string
+  status?: string
+}
+
+export type VehicleLocation = {
+  vehicle_id: string
+  vehicle_number: string
+  current_location: {
+    latitude: number
+    longitude: number
+    timestamp: string
+  }
+  current_geofences: CurrentGeofence[]
+}
+
+export type AlertEvent = {
+  event_id: string
+  event_type: "entry" | "exit"
+  timestamp: string
+  vehicle: { vehicle_id: string; vehicle_number: string; driver_name: string }
+  geofence: { geofence_id: string; geofence_name: string; category: string }
+  location: { latitude: number; longitude: number }
+}
+
 type ApiResponse = {
   time_ns: string
 }
@@ -75,6 +102,7 @@ export const api = {
   }) => request<{ id: string; name: string; status: string; time_ns: string }>("/geofences", { method: "POST", body: input }),
   deleteGeofence: (geofenceId: string) => request<{ status: string; geofence_id: string; time_ns: string }>(`/geofences/${geofenceId}`, { method: "DELETE" }),
   vehicles: () => request<{ vehicles: Vehicle[]; time_ns: string }>("/vehicles"),
+  vehicleLocation: (vehicleId: string) => request<VehicleLocation & { time_ns: string }>(`/vehicles/location/${vehicleId}`),
   createVehicle: (input: {
     vehicle_number: string
     driver_name: string
@@ -86,15 +114,23 @@ export const api = {
     latitude: number
     longitude: number
     timestamp: string
-  }) => request<{ vehicle_id: string; location_updated: boolean; current_geofences: unknown[]; time_ns: string }>("/vehicles/location", { method: "POST", body: input }),
+  }) => request<{ vehicle_id: string; location_updated: boolean; current_geofences: CurrentGeofence[]; time_ns: string }>("/vehicles/location", { method: "POST", body: input }),
   configureAlert: (input: {
     geofence_id: string
     vehicle_id: string
     event_type: "entry" | "exit" | "both"
   }) => request<{ alert_id: string; geofence_id: string; vehicle_id: string; event_type: string; status: string; time_ns: string }>("/alerts/configure", { method: "POST", body: input }),
   alerts: () => request<{ alerts: AlertConfig[]; time_ns: string }>("/alerts"),
-  violations: () =>
+  violations: (filters: { vehicle_id?: string; geofence_id?: string; start_date?: string; end_date?: string; limit?: number } = {}) =>
     request<{ violations: Violation[]; total_count: number; time_ns: string }>(
-      "/violations/history?limit=5",
+      `/violations/history?${new URLSearchParams(Object.entries({ ...filters, limit: filters.limit ?? 50 }).filter(([, value]) => value !== undefined && value !== ""))}`,
     ),
+}
+
+export function alertsWebSocketUrl(): string {
+  const configuredUrl = import.meta.env.VITE_API_URL as string | undefined
+  if (configuredUrl?.startsWith("http")) {
+    return configuredUrl.replace(/^http/, "ws") + "/ws/alerts"
+  }
+  return `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/api/ws/alerts`
 }

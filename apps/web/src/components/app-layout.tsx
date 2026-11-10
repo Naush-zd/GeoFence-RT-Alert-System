@@ -1,4 +1,5 @@
 import { NavLink } from "react-router-dom"
+import type { ReactNode } from "react"
 import { AlertTriangle, BellRing, CircleGauge, MapPinned, Radio, Truck } from "lucide-react"
 import { ModeToggle } from "./mode-toggle"
 import { Badge } from "./ui/badge"
@@ -23,6 +24,7 @@ import {
 } from "./ui/sidebar"
 import { pageDescriptions, type DashboardData } from "../lib/dashboard"
 import { useLocation } from "react-router-dom"
+import { LiveAlerts } from "./live-alerts"
 
 export const navItems = [
   { to: "/", label: "Overview", icon: CircleGauge, end: true },
@@ -43,9 +45,9 @@ function PageHeader({ data, loading, onRefresh }: { data: DashboardData; loading
   )
 }
 
-function AppLayout({ data, loading, error, onRefresh, children }: { data: DashboardData; loading: boolean; error: string | null; onRefresh: () => void; children: React.ReactNode }) {
+function AppLayout({ data, loading, error, onRefresh, children }: { data: DashboardData; loading: boolean; error: string | null; onRefresh: () => void; children: ReactNode }) {
   return (
-    <SidebarProvider defaultOpen={false}>
+    <><LiveAlerts /><SidebarProvider defaultOpen={false}>
       <Sidebar collapsible="icon" variant="sidebar">
         <SidebarHeader className="p-3"><div className="flex items-center gap-2 px-1"><div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground"><Radio size={18} /></div><div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden"><span className="truncate font-semibold text-sidebar-foreground">GeoFence</span><span className="truncate text-xs text-sidebar-foreground/60">Control center</span></div></div></SidebarHeader>
         <SidebarSeparator />
@@ -56,7 +58,7 @@ function AppLayout({ data, loading, error, onRefresh, children }: { data: Dashbo
         <header className="flex h-14 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur md:px-6"><SidebarTrigger aria-label="Toggle navigation" /><Separator orientation="vertical" className="h-5" /><span className="text-sm font-semibold">GeoFence</span><span className="ml-auto flex items-center gap-3 text-xs text-muted-foreground"><span className="flex items-center gap-2"><span className={`size-2 rounded-full ${data.apiStatus === "ok" ? "bg-emerald-500" : "bg-amber-500"}`} /> API {data.apiStatus}</span><ModeToggle /></span></header>
         <main className="min-w-0 flex-1 px-4 pb-12 md:px-8 lg:px-12"><PageHeader data={data} loading={loading} onRefresh={onRefresh} />{error && <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" role="alert">{error}</div>}{children}</main>
       </SidebarInset>
-    </SidebarProvider>
+    </SidebarProvider></>
   )
 }
 
