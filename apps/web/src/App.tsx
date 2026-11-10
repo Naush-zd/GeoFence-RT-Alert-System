@@ -205,6 +205,9 @@ function OverviewPage({ data, onRefresh }: { data: DashboardData; onRefresh: () 
 
 function SimulationCard({ onComplete }: { onComplete: () => Promise<void> }) {
   const [running, setRunning] = useState(false)
+  const [simulationGeofence, setSimulationGeofence] = useState<Geofence | null>(null)
+  const [simulationVehicle, setSimulationVehicle] = useState<Vehicle | null>(null)
+  const [vehiclePosition, setVehiclePosition] = useState<[number, number] | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -213,41 +216,71 @@ function SimulationCard({ onComplete }: { onComplete: () => Promise<void> }) {
     setMessage(null)
     setError(null)
     try {
-      const demoCoordinates = [[20, 0], [20.1, 0], [20.1, 0.1], [20, 0.1], [20, 0]]
+      const delhiCoordinates = [
+        [28.48, 77.05],
+        [28.48, 77.38],
+        [28.78, 77.38],
+        [28.78, 77.05],
+        [28.48, 77.05],
+      ]
       const [currentGeofences, currentVehicles] = await Promise.all([apiClient.geofences(), apiClient.vehicles()])
-      const existingGeofence = currentGeofences.geofences.find((item) => item.name === "Demo delivery boundary")
-      const geofence = existingGeofence ? existingGeofence : await apiClient.createGeofence({
-        name: "Demo delivery boundary",
-        description: "Seeded boundary for the vehicle alert walkthrough.",
-        category: "delivery_zone",
-        coordinates: demoCoordinates,
-      }).then((result) => ({ id: result.id, name: result.name }))
+      const existingGeofence = currentGeofences.geofences.find((item) => item.name === "Delhi delivery boundary")
+      let geofence: Geofence
+      if (existingGeofence) {
+        geofence = existingGeofence
+      } else {
+        const result = await apiClient.createGeofence({
+          name: "Delhi delivery boundary",
+          description: "Delhi boundary for the vehicle entry and exit walkthrough.",
+          category: "delivery_zone",
+          coordinates: delhiCoordinates,
+        })
+        geofence = {
+          id: result.id,
+          name: result.name,
+          description: "Delhi boundary for the vehicle entry and exit walkthrough.",
+          category: "delivery_zone",
+          coordinates: delhiCoordinates,
+          created_at: new Date().toISOString(),
+        }
+      }
       const existingVehicle = currentVehicles.vehicles.find((item) => item.vehicle_number === "DEMO-001")
-      const vehicle = existingVehicle ? existingVehicle : await apiClient.createVehicle({
-        vehicle_number: "DEMO-001",
-        driver_name: "Simulation Driver",
-        vehicle_type: "van",
-        phone: "+0000000000",
-      }).then((result) => ({ id: result.id, vehicle_number: result.vehicle_number }))
+      let vehicle: Vehicle
+      if (existingVehicle) {
+        vehicle = existingVehicle
+      } else {
+        const result = await apiClient.createVehicle({
+          vehicle_number: "DEMO-001",
+          driver_name: "Simulation Driver",
+          vehicle_type: "van",
+          phone: "+0000000000",
+        })
+        vehicle = {
+          id: result.id,
+          vehicle_number: result.vehicle_number,
+          driver_name: "Simulation Driver",
+          vehicle_type: "van",
+          phone: "+0000000000",
+          status: "active",
+          created_at: new Date().toISOString(),
+        }
+      }
       const currentAlerts = await apiClient.alerts()
       const hasDemoAlert = currentAlerts.alerts.some((alert) => alert.geofence_id === geofence.id && alert.vehicle_id === vehicle.id && alert.event_type === "both")
       if (!hasDemoAlert) await apiClient.configureAlert({ geofence_id: geofence.id, vehicle_id: vehicle.id, event_type: "both" })
 
-      const baseTime = Date.now()
-      const route = [
-        { latitude: 19.9, longitude: -0.1 },
-        { latitude: 20.05, longitude: 0.05 },
-        { latitude: 19.9, longitude: -0.1 },
-      ]
-      for (const [index, point] of route.entries()) {
-        await apiClient.updateVehicleLocation({
-          vehicle_id: vehicle.id,
-          ...point,
-          timestamp: new Date(baseTime + index * 1000).toISOString(),
-        })
-      }
+      const startPosition: [number, number] = [29.35, 77.6]
+      await apiClient.updateVehicleLocation({
+        vehicle_id: vehicle.id,
+        latitude: startPosition[0],
+        longitude: startPosition[1],
+        timestamp: new Date().toISOString(),
+      })
+      setSimulationGeofence(geofence)
+      setSimulationVehicle(vehicle)
+      setVehiclePosition(startPosition)
       await onComplete()
-      setMessage("Simulation complete: DEMO-001 entered and exited the demo boundary.")
+      setMessage("Delhi simulation ready. Drag the blue marker into the shaded zone, then back out.")
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Unable to run the simulation")
     } finally {
@@ -255,7 +288,26 @@ function SimulationCard({ onComplete }: { onComplete: () => Promise<void> }) {
     }
   }
 
-  return <Card><CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><CardTitle>Vehicle alert simulation</CardTitle><CardDescription>Seed a demo boundary and vehicle, then replay an outside → inside → outside route to generate entry and exit alerts.</CardDescription></div><Button onClick={() => void run()} disabled={running}><Play data-icon="inline-start" />{running ? "Running…" : "Run demo simulation"}</Button></CardHeader>{message && <CardContent className="pt-0"><p className="text-sm text-primary" role="status">{message}</p></CardContent>}{error && <CardContent className="pt-0"><p className="text-sm text-destructive" role="alert">{error}</p></CardContent>}</Card>
+  const moveVehicle = async (point: [number, number]) => {
+    if (!simulationVehicle) return
+    setVehiclePosition(point)
+    setError(null)
+    try {
+      const result = await apiClient.updateVehicleLocation({
+        vehicle_id: simulationVehicle.id,
+        latitude: point[0],
+        longitude: point[1],
+        timestamp: new Date().toISOString(),
+      })
+      const transition = result.current_geofences.length > 0 ? "entered" : "exited"
+      setMessage(`DEMO-001 ${transition} the Delhi delivery boundary.`)
+      await onComplete()
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Unable to update the simulated vehicle")
+    }
+  }
+
+  return <Card><CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><CardTitle>Vehicle alert simulation</CardTitle><CardDescription>Set up a Delhi geofence, then drag the blue vehicle marker from Uttar Pradesh into Delhi and back out to generate entry and exit alerts.</CardDescription></div><Button onClick={() => void run()} disabled={running}><Play data-icon="inline-start" />{running ? "Preparing…" : simulationGeofence ? "Reset simulation" : "Set up Delhi simulation"}</Button></CardHeader>{simulationGeofence && vehiclePosition && <CardContent className="pt-0"><div className="h-[28rem] overflow-hidden rounded-lg border"><OperationsMap geofences={[simulationGeofence]} selectedGeofenceId={simulationGeofence.id} vehiclePosition={vehiclePosition} onMoveVehicle={(point) => void moveVehicle(point)} /></div><p className="mt-3 text-xs text-muted-foreground">Drag the blue marker into the shaded Delhi boundary for entry, then drag it back to Uttar Pradesh for exit.</p></CardContent>}{message && <CardContent className="pt-0"><p className="text-sm text-primary" role="status">{message}</p></CardContent>}{error && <CardContent className="pt-0"><p className="text-sm text-destructive" role="alert">{error}</p></CardContent>}</Card>
 }
 
 function GeofencesPage({ geofences, onCreated }: { geofences: Geofence[]; onCreated: () => void }) {

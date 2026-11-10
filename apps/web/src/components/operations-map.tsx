@@ -12,6 +12,12 @@ const draftPointIcon = divIcon({
   iconSize: [14, 14],
   iconAnchor: [7, 7],
 })
+const vehicleIcon = divIcon({
+  className: "border-0 bg-transparent",
+  html: '<span style="display:flex;width:30px;height:30px;align-items:center;justify-content:center;border:3px solid white;border-radius:9999px;background:#2563eb;color:white;box-shadow:0 2px 8px rgba(0,0,0,.45);font-size:16px;">●</span>',
+  iconSize: [30, 30],
+  iconAnchor: [15, 15],
+})
 
 function MapClickCapture({ onAddPoint }: { onAddPoint?: (point: [number, number]) => void }) {
   useMapEvents({
@@ -20,13 +26,14 @@ function MapClickCapture({ onAddPoint }: { onAddPoint?: (point: [number, number]
   return null
 }
 
-function MapSelection({ geofence }: { geofence?: Geofence }) {
+function MapSelection({ geofence, vehiclePosition }: { geofence?: Geofence; vehiclePosition?: [number, number] }) {
   const map = useMap()
 
   useEffect(() => {
     if (!geofence || geofence.coordinates.length < 2) return
-    map.fitBounds(geofence.coordinates as [number, number][], { padding: [32, 32], maxZoom: 14 })
-  }, [geofence, map])
+    const points = vehiclePosition ? [...geofence.coordinates, vehiclePosition] : geofence.coordinates
+    map.fitBounds(points as [number, number][], { padding: [32, 32], maxZoom: 10 })
+  }, [geofence, map, vehiclePosition])
 
   return null
 }
@@ -37,12 +44,16 @@ function OperationsMap({
   draftCoordinates = [],
   onAddPoint,
   onMovePoint,
+  vehiclePosition,
+  onMoveVehicle,
 }: {
   geofences: Geofence[]
   selectedGeofenceId?: string | null
   draftCoordinates?: number[][]
   onAddPoint?: (point: [number, number]) => void
   onMovePoint?: (index: number, point: [number, number]) => void
+  vehiclePosition?: [number, number]
+  onMoveVehicle?: (point: [number, number]) => void
 }) {
   return (
     <MapContainer center={defaultCenter} zoom={2} scrollWheelZoom doubleClickZoom={false} className="relative z-0 isolate h-full min-h-96 w-full">
@@ -51,7 +62,7 @@ function OperationsMap({
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       <MapClickCapture onAddPoint={onAddPoint} />
-      <MapSelection geofence={geofences.find((geofence) => geofence.id === selectedGeofenceId)} />
+      <MapSelection geofence={geofences.find((geofence) => geofence.id === selectedGeofenceId)} vehiclePosition={vehiclePosition} />
       {geofences.map((geofence) => (
         <Polygon
           key={geofence.id}
@@ -81,6 +92,19 @@ function OperationsMap({
           }}
         />
       ))}
+      {vehiclePosition && (
+        <Marker
+          position={vehiclePosition}
+          icon={vehicleIcon}
+          draggable
+          eventHandlers={{
+            dragend: (event) => {
+              const position = event.target.getLatLng()
+              onMoveVehicle?.([position.lat, position.lng])
+            },
+          }}
+        />
+      )}
     </MapContainer>
   )
 }
