@@ -1,6 +1,6 @@
 import { NavLink } from "react-router-dom"
 import type { ReactNode } from "react"
-import { AlertTriangle, BellRing, CircleGauge, MapPinned, Radio, RefreshCw, Truck } from "lucide-react"
+import { AlertTriangle, BellRing, CircleGauge, MapPinned, PanelLeftIcon, Radio, RefreshCw, Truck } from "lucide-react"
 import { ModeToggle } from "./mode-toggle"
 import { Badge } from "./ui/badge"
 import { Button } from "./ui/button"
@@ -36,6 +36,35 @@ export const navItems = [
   { to: "/violations", label: "Violations", icon: AlertTriangle },
 ]
 
+function SidebarBrandToggle() {
+  const { isMobile, openMobile, state, toggleSidebar } = useSidebar()
+  const expanded = isMobile ? openMobile : state === "expanded"
+  const label = isMobile
+    ? expanded ? "Close navigation" : "Open navigation"
+    : expanded ? "Collapse sidebar" : "Expand sidebar"
+
+  return (
+    <div className="flex w-full items-center gap-2 px-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="group relative rounded-lg border-0 bg-primary p-0 text-primary-foreground hover:bg-primary/90"
+        onClick={toggleSidebar}
+        aria-label={label}
+        title={label}
+      >
+        <Radio className="size-[18px] transition-opacity group-hover:opacity-0 group-focus-visible:opacity-0" />
+        <PanelLeftIcon className="absolute size-[18px] opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+      </Button>
+      <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
+        <span className="truncate font-semibold text-sidebar-foreground">GeoFence</span>
+        <span className="truncate text-xs text-sidebar-foreground/60">Control center</span>
+      </div>
+    </div>
+  )
+}
+
 function WorkspaceNavigation() {
   const { isMobile, setOpenMobile } = useSidebar()
   return <SidebarContent className="overflow-hidden"><ScrollArea className="h-full"><SidebarGroup><SidebarGroupLabel>Workspace</SidebarGroupLabel><SidebarGroupContent><SidebarMenu>{navItems.map(({ to, label, icon: Icon, end }) => <SidebarMenuItem key={to}><NavLink to={to} end={end} onClick={() => { if (isMobile) setOpenMobile(false) }}>{({ isActive }) => <SidebarMenuButton render={<span />} isActive={isActive} tooltip={label}><Icon /><span>{label}</span></SidebarMenuButton>}</NavLink></SidebarMenuItem>)}</SidebarMenu></SidebarGroupContent></SidebarGroup></ScrollArea></SidebarContent>
@@ -57,13 +86,20 @@ function AppLayout({ data, loading, error, onRefresh, onAlertEvent, children }: 
   return (
     <><LiveAlerts onEvent={onAlertEvent} /><SidebarProvider defaultOpen={defaultSidebarOpen}>
       <Sidebar collapsible="icon" variant="sidebar">
-        <SidebarHeader className="p-3"><div className="flex items-center gap-2 px-1"><div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground"><Radio size={18} /></div><div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden"><span className="truncate font-semibold text-sidebar-foreground">GeoFence</span><span className="truncate text-xs text-sidebar-foreground/60">Control center</span></div></div></SidebarHeader>
+        <SidebarHeader className="p-3"><SidebarBrandToggle /></SidebarHeader>
         <SidebarSeparator />
         <WorkspaceNavigation />
-        <SidebarFooter className="gap-2 p-3"><Separator className="bg-sidebar-border" /><span className="text-[11px] text-sidebar-foreground/50 group-data-[collapsible=icon]:hidden">v0.1.0 · Local workspace</span></SidebarFooter>
+        <SidebarFooter className="gap-2 p-3 group-data-[collapsible=icon]:p-2">
+          <Separator className="bg-sidebar-border" />
+          <div className="flex items-center justify-between gap-2 group-data-[collapsible=icon]:justify-center">
+            <span className="text-xs text-sidebar-foreground/70 group-data-[collapsible=icon]:hidden">Appearance</span>
+            <ModeToggle />
+          </div>
+          <span className="text-[11px] text-sidebar-foreground/50 group-data-[collapsible=icon]:hidden">v0.1.0 · Local workspace</span>
+        </SidebarFooter>
       </Sidebar>
       <SidebarInset>
-        <header className="flex h-14 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur md:px-6"><SidebarTrigger aria-label="Toggle navigation" /><Separator orientation="vertical" className="h-5" /><span className="text-sm font-semibold">GeoFence</span><span className="ml-auto"><ModeToggle /></span></header>
+        <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur md:hidden"><SidebarTrigger aria-label="Toggle navigation" /><Separator orientation="vertical" className="h-5" /><span className="text-sm font-semibold">GeoFence</span></header>
         <main className="min-w-0 flex-1 px-4 pb-12 md:px-8 lg:px-12"><PageHeader data={data} loading={loading} onRefresh={onRefresh} />{error && <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" role="alert">{error}</div>}{children}</main>
       </SidebarInset>
     </SidebarProvider></>
