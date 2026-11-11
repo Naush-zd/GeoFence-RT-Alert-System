@@ -1,5 +1,8 @@
+import axios from "axios"
+
 const configuredApiUrl = import.meta.env.VITE_API_URL as string | undefined
 const apiBaseUrl = import.meta.env.PROD ? "/api" : configuredApiUrl ?? "/api"
+const http = axios.create({ baseURL: apiBaseUrl })
 
 export type Geofence = {
   id: string
@@ -88,51 +91,112 @@ type RequestOptions = {
 }
 
 async function request<T extends ApiResponse>(path: string, options: RequestOptions = {}): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    method: options.method ?? "GET",
-    headers: options.body ? { "Content-Type": "application/json" } : undefined,
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  })
-  const payload = (await response.json()) as T & { error?: string }
-  if (!response.ok) {
-    throw new Error(payload.error ?? `Request failed with status ${response.status}`)
+  try {
+    const response = await http.request<T>({
+      url: path,
+      method: options.method ?? "GET",
+      data: options.body,
+      headers: options.body ? { "Content-Type": "application/json" } : undefined,
+    })
+    return response.data
+  } catch (error) {
+    if (axios.isAxiosError<{ error?: string }>(error)) {
+      const message = error.response?.data?.error
+      if (message) throw new Error(message)
+      if (error.response) throw new Error(`Request failed with status ${error.response.status}`)
+    }
+    throw error
   }
-  return payload
+}
+
+function violationQuery(filters: ViolationFilters): string {
+  const params = new URLSearchParams()
+  const values = { ...filters, limit: filters.limit ?? 50 }
+
+  for (const [key, value] of Object.entries(values)) {
+    if (value !== undefined && value !== "") {
+      params.set(key, String(value))
+    }
+  }
+
+  return params.toString()
 }
 
 export const api = {
   health: () => request<{ status: string; time_ns: string }>("/healthz"),
+
   geofences: () => request<{ geofences: Geofence[]; time_ns: string }>("/geofences"),
+
   createGeofence: (input: {
     name: string
     description: string
     category: string
     coordinates: number[][]
-  }) => request<{ id: string; name: string; status: string; time_ns: string }>("/geofences", { method: "POST", body: input }),
-  deleteGeofence: (geofenceId: string) => request<{ status: string; geofence_id: string; time_ns: string }>(`/geofences/${geofenceId}`, { method: "DELETE" }),
+  }) =>
+    request<{ id: string; name: string; status: string; time_ns: string }>("/geofences", {
+      method: "POST",
+      body: input,
+    }),
+
+  deleteGeofence: (geofenceId: string) =>
+    request<{ status: string; geofence_id: string; time_ns: string }>(`/geofences/${geofenceId}`, {
+      method: "DELETE",
+    }),
+
   vehicles: () => request<{ vehicles: Vehicle[]; time_ns: string }>("/vehicles"),
-  vehicleLocation: (vehicleId: string) => request<VehicleLocation & { time_ns: string }>(`/vehicles/location/${vehicleId}`),
+
+  vehicleLocation: (vehicleId: string) =>
+    request<VehicleLocation & { time_ns: string }>(`/vehicles/location/${vehicleId}`),
+
   createVehicle: (input: {
     vehicle_number: string
     driver_name: string
     vehicle_type: string
     phone: string
-  }) => request<{ id: string; vehicle_number: string; status: string; time_ns: string }>("/vehicles", { method: "POST", body: input }),
+  }) =>
+    request<{ id: string; vehicle_number: string; status: string; time_ns: string }>("/vehicles", {
+      method: "POST",
+      body: input,
+    }),
+
   updateVehicleLocation: (input: {
     vehicle_id: string
     latitude: number
     longitude: number
     timestamp: string
-  }) => request<{ vehicle_id: string; location_updated: boolean; current_geofences: CurrentGeofence[]; time_ns: string }>("/vehicles/location", { method: "POST", body: input }),
+  }) =>
+    request<{
+      vehicle_id: string
+      location_updated: boolean
+      current_geofences: CurrentGeofence[]
+      time_ns: string
+    }>("/vehicles/location", {
+      method: "POST",
+      body: input,
+    }),
+
   configureAlert: (input: {
     geofence_id: string
     vehicle_id: string
     event_type: "entry" | "exit" | "both"
-  }) => request<{ alert_id: string; geofence_id: string; vehicle_id: string; event_type: string; status: string; time_ns: string }>("/alerts/configure", { method: "POST", body: input }),
+  }) =>
+    request<{
+      alert_id: string
+      geofence_id: string
+      vehicle_id: string
+      event_type: string
+      status: string
+      time_ns: string
+    }>("/alerts/configure", {
+      method: "POST",
+      body: input,
+    }),
+
   alerts: () => request<{ alerts: AlertConfig[]; time_ns: string }>("/alerts"),
+
   violations: (filters: ViolationFilters = {}) =>
     request<{ violations: Violation[]; total_count: number; time_ns: string }>(
-      `/violations/history?${new URLSearchParams(Object.entries({ ...filters, limit: filters.limit ?? 50 }).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]))}`,
+      `/violations/history?${violationQuery(filters)}`,
     ),
 }
 
@@ -140,6 +204,7 @@ export function alertsWebSocketUrl(): string {
   if (!import.meta.env.PROD && configuredApiUrl?.startsWith("http")) {
     return configuredApiUrl.replace(/^http/, "ws") + "/ws/alerts"
   }
+
   const websocketProtocol = window.location.protocol === "https:" ? "wss:" : "ws:"
   return `${websocketProtocol}//${window.location.host}${apiBaseUrl}/ws/alerts`
 }

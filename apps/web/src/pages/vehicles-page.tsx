@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { Truck } from "lucide-react"
 import type { Vehicle } from "../lib/api"
 import { api as apiClient } from "../lib/api"
+import { useVehicleLocations } from "../hooks/use-vehicle-locations"
 import { Badge } from "../components/ui/badge"
 import { Button } from "../components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog"
@@ -9,7 +10,6 @@ import { Input } from "../components/ui/input"
 import { Label } from "../components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select"
 import { ListCard, PageSection } from "../components/dashboard-widgets"
-import type { CurrentGeofence } from "../lib/api"
 
 const vehicleTypeLabels: Record<string, string> = {
   truck: "Truck",
@@ -19,22 +19,9 @@ const vehicleTypeLabels: Record<string, string> = {
 }
 
 export function VehiclesPage({ vehicles, onCreated }: { vehicles: Vehicle[]; onCreated: () => void }) {
-  const [locations, setLocations] = useState<Record<string, { latitude: number; longitude: number; geofences: CurrentGeofence[] }>>({})
-  useEffect(() => {
-    let active = true
-    void Promise.all(vehicles.map(async (vehicle) => {
-      try {
-        const location = await apiClient.vehicleLocation(vehicle.id)
-        return [vehicle.id, { latitude: location.current_location.latitude, longitude: location.current_location.longitude, geofences: location.current_geofences }] as const
-      } catch {
-        return null
-      }
-    })).then((entries) => {
-      if (active) setLocations(Object.fromEntries(entries.filter((entry): entry is NonNullable<typeof entry> => entry !== null)))
-    })
-    return () => { active = false }
-  }, [vehicles])
-  return <PageSection title="Vehicle registry" count={`${vehicles.length} ${vehicles.length === 1 ? "vehicle" : "vehicles"}`} action="+ Register vehicle" actionContent={<RegisterVehicleDialog onCreated={onCreated} />}><ListCard>{vehicles.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">No vehicles registered yet.</p> : <div className="grid gap-2">{vehicles.map((vehicle) => { const location = locations[vehicle.id]; return <div className="flex min-w-0 items-start gap-3 rounded-md bg-muted/40 p-3 sm:items-center" key={vehicle.id}><span className="mt-1 flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary sm:mt-0"><Truck size={18} /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><p className="font-medium">{vehicle.vehicle_number}</p><Badge variant="secondary">{vehicle.status}</Badge></div><p className="mt-0.5 text-xs text-muted-foreground">{vehicle.driver_name} · {vehicle.vehicle_type}</p><p className="mt-1 text-xs text-muted-foreground">{location ? `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}${location.geofences.length ? ` · Inside ${location.geofences.map((geofence) => geofence.geofence_name).join(", ")}` : " · Outside configured zones"}` : "Location not available"}</p></div></div> })}</div>}</ListCard></PageSection>
+  const locationsQuery = useVehicleLocations(vehicles)
+  const locationsByVehicle = new Map((locationsQuery.data ?? []).map((location) => [location.vehicle_id, location]))
+  return <PageSection title="Vehicle registry" count={`${vehicles.length} ${vehicles.length === 1 ? "vehicle" : "vehicles"}`} action="+ Register vehicle" actionContent={<RegisterVehicleDialog onCreated={onCreated} />}><ListCard>{vehicles.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">No vehicles registered yet.</p> : <div className="grid gap-2">{vehicles.map((vehicle) => { const location = locationsByVehicle.get(vehicle.id); return <div className="flex min-w-0 items-start gap-3 rounded-md bg-muted/40 p-3 sm:items-center" key={vehicle.id}><span className="mt-1 flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary sm:mt-0"><Truck size={18} /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><p className="font-medium">{vehicle.vehicle_number}</p><Badge variant="secondary">{vehicle.status}</Badge></div><p className="mt-0.5 text-xs text-muted-foreground">{vehicle.driver_name} · {vehicle.vehicle_type}</p><p className="mt-1 text-xs text-muted-foreground">{location ? `${location.current_location.latitude.toFixed(5)}, ${location.current_location.longitude.toFixed(5)}${location.current_geofences.length ? ` · Inside ${location.current_geofences.map((geofence) => geofence.geofence_name).join(", ")}` : " · Outside configured zones"}` : "Location not available"}</p></div></div> })}</div>}</ListCard></PageSection>
 }
 
 function RegisterVehicleDialog({ onCreated }: { onCreated: () => void }) {

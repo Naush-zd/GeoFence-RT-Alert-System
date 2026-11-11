@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { AlertTriangle, BellRing, MapPinned, Play, Truck } from "lucide-react"
-import type { Geofence, Vehicle, VehicleLocation } from "../lib/api"
+import type { Geofence, Vehicle } from "../lib/api"
 import { api as apiClient } from "../lib/api"
 import type { DashboardData } from "../lib/dashboard"
+import { useVehicleLocations } from "../hooks/use-vehicle-locations"
 import { OperationsMap } from "../components/operations-map"
 import { AlertList, GeofenceList, MetricCard, Panel, VehicleList, ViolationList } from "../components/dashboard-widgets"
 import { Badge } from "../components/ui/badge"
@@ -14,52 +15,8 @@ export function OverviewPage({ data, onRefresh }: { data: DashboardData; onRefre
 }
 
 function LiveOperationsMap({ geofences, vehicles }: { geofences: Geofence[]; vehicles: Vehicle[] }) {
-  const [locationsByVehicle, setLocationsByVehicle] = useState<Record<string, VehicleLocation>>({})
-  const [lastCheckedAt, setLastCheckedAt] = useState<Date | null>(null)
-
-  useEffect(() => {
-    let active = true
-    let fetching = false
-
-    const refreshLocations = async () => {
-      if (fetching) return
-      fetching = true
-      try {
-        const results = await Promise.all(vehicles.map(async (vehicle) => {
-          try {
-            return await apiClient.vehicleLocation(vehicle.id)
-          } catch {
-            return null
-          }
-        }))
-
-        if (!active) return
-        const vehicleIds = new Set(vehicles.map((vehicle) => vehicle.id))
-        setLocationsByVehicle((current) => {
-          const next = Object.fromEntries(Object.entries(current).filter(([id]) => vehicleIds.has(id)))
-          for (const location of results) {
-            if (location) next[location.vehicle_id] = location
-          }
-          return next
-        })
-        setLastCheckedAt(new Date())
-      } finally {
-        fetching = false
-      }
-    }
-
-    void refreshLocations()
-    const intervalId = window.setInterval(() => void refreshLocations(), 5000)
-    return () => {
-      active = false
-      window.clearInterval(intervalId)
-    }
-  }, [vehicles])
-
-  const locations = vehicles.flatMap((vehicle) => {
-    const location = locationsByVehicle[vehicle.id]
-    return location ? [location] : []
-  })
+  const locationsQuery = useVehicleLocations(vehicles)
+  const locations = locationsQuery.data ?? []
   const vehicleSummary = vehicles.length === 0
     ? "No vehicles registered"
     : `${locations.length} of ${vehicles.length} vehicles located`
@@ -86,7 +43,7 @@ function LiveOperationsMap({ geofences, vehicles }: { geofences: Geofence[]; veh
         </div>
         <div className="flex flex-col gap-1 pt-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
           <span>Select a vehicle marker for its latest location and boundary status.</span>
-          <span>{lastCheckedAt ? `Last checked ${lastCheckedAt.toLocaleTimeString()}` : "Checking vehicle locations…"}</span>
+          <span>{locationsQuery.dataUpdatedAt ? `Last checked ${new Date(locationsQuery.dataUpdatedAt).toLocaleTimeString()}` : "Checking vehicle locations…"}</span>
         </div>
       </CardContent>
     </Card>
