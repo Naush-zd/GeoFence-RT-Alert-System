@@ -1,5 +1,5 @@
 import { useState } from "react"
-import type { Geofence } from "../lib/api"
+import type { Geofence } from "../types/api"
 import { api as apiClient } from "../lib/api"
 import { Button } from "./ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog"

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { AlertTriangle, X } from "lucide-react"
-import type { AlertEvent } from "../lib/api"
+import type { AlertEvent } from "../types/api"
 import { alertsWebSocketUrl } from "../lib/api"
 import { Button } from "./ui/button"
 

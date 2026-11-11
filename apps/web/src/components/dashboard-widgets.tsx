@@ -1,7 +1,7 @@
 import { NavLink } from "react-router-dom"
 import { AlertTriangle, BellRing, MapPinned, Trash2, Truck } from "lucide-react"
 import type { ReactNode } from "react"
-import type { AlertConfig, Geofence, Vehicle, Violation } from "../lib/api"
+import type { AlertConfig, Geofence, Vehicle, Violation } from "../types/api"
 import { Badge } from "./ui/badge"
 import { Button, buttonVariants } from "./ui/button"
 import { Card, CardContent, CardHeader, CardDescription, CardTitle } from "./ui/card"

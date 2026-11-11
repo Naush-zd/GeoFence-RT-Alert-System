@@ -23,8 +23,9 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "./ui/sidebar"
-import { pageDescriptions, type DashboardData } from "../lib/dashboard"
-import type { AlertEvent } from "../lib/api"
+import { pageDescriptions } from "../lib/dashboard"
+import type { AlertEvent } from "../types/api"
+import type { DashboardData } from "../types/dashboard"
 import { useLocation } from "react-router-dom"
 import { LiveAlerts } from "./live-alerts"
 

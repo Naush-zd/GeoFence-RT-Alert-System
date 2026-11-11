@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
-import type { Vehicle, VehicleLocation } from "../lib/api"
+import type { Vehicle, VehicleLocation } from "../types/api"
 import { api } from "../lib/api"
 
 export function useVehicleLocations(vehicles: Vehicle[]) {

@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { Download } from "lucide-react"
-import type { AlertConfig, AlertEvent, Geofence, Vehicle, Violation, ViolationFilters } from "../lib/api"
+import type { AlertConfig, AlertEvent, Geofence, Vehicle, Violation, ViolationFilters } from "../types/api"
 import { api as apiClient } from "../lib/api"
 import { AlertList, ListCard, PageSection, ViolationList } from "../components/dashboard-widgets"
 import { Button, buttonVariants } from "../components/ui/button"

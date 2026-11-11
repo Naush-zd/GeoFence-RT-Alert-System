@@ -1,5 +1,5 @@
 import { useState } from "react"
-import type { Geofence } from "../lib/api"
+import type { Geofence } from "../types/api"
 import { api as apiClient } from "../lib/api"
 import { OperationsMap } from "../components/operations-map"
 import { Button } from "../components/ui/button"

@@ -1,7 +1,7 @@
 import { MapContainer, Marker, Polygon, Popup, TileLayer, Tooltip, useMap, useMapEvents } from "react-leaflet"
 import { divIcon } from "leaflet"
 import type { LatLngExpression } from "leaflet"
-import type { Geofence, VehicleLocation } from "../lib/api"
+import type { Geofence, VehicleLocation } from "../types/api"
 import { useEffect, useRef } from "react"
 import "leaflet/dist/leaflet.css"
 

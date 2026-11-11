@@ -1,94 +1,28 @@
 import axios from "axios"
+import type {
+  AlertsResponse,
+  ApiResponse,
+  ConfigureAlertRequest,
+  ConfigureAlertResponse,
+  CreateGeofenceRequest,
+  CreateGeofenceResponse,
+  CreateVehicleRequest,
+  CreateVehicleResponse,
+  DeleteGeofenceResponse,
+  GeofencesResponse,
+  HealthResponse,
+  RequestOptions,
+  UpdateVehicleLocationRequest,
+  UpdateVehicleLocationResponse,
+  VehicleLocationResponse,
+  VehiclesResponse,
+  ViolationFilters,
+  ViolationsResponse,
+} from "../types/api"
 
 const configuredApiUrl = import.meta.env.VITE_API_URL as string | undefined
 const apiBaseUrl = import.meta.env.PROD ? "/api" : configuredApiUrl ?? "/api"
 const http = axios.create({ baseURL: apiBaseUrl })
-
-export type Geofence = {
-  id: string
-  name: string
-  description: string
-  category: string
-  coordinates: number[][]
-  created_at: string
-}
-
-export type Vehicle = {
-  id: string
-  vehicle_number: string
-  driver_name: string
-  vehicle_type: string
-  phone: string
-  status: string
-  created_at: string
-}
-
-export type AlertConfig = {
-  alert_id: string
-  geofence_id: string
-  geofence_name: string
-  vehicle_id?: string
-  vehicle_number?: string
-  event_type: string
-  status: string
-  created_at: string
-}
-
-export type Violation = {
-  id: string
-  vehicle_id: string
-  vehicle_number: string
-  geofence_id: string
-  geofence_name: string
-  event_type: string
-  latitude: number
-  longitude: number
-  timestamp: string
-}
-
-export type ViolationFilters = {
-  vehicle_id?: string
-  geofence_id?: string
-  start_date?: string
-  end_date?: string
-  limit?: number
-}
-
-export type CurrentGeofence = {
-  geofence_id: string
-  geofence_name: string
-  category?: string
-  status?: string
-}
-
-export type VehicleLocation = {
-  vehicle_id: string
-  vehicle_number: string
-  current_location: {
-    latitude: number
-    longitude: number
-    timestamp: string
-  }
-  current_geofences: CurrentGeofence[]
-}
-
-export type AlertEvent = {
-  event_id: string
-  event_type: "entry" | "exit"
-  timestamp: string
-  vehicle: { vehicle_id: string; vehicle_number: string; driver_name: string }
-  geofence: { geofence_id: string; geofence_name: string; category: string }
-  location: { latitude: number; longitude: number }
-}
-
-type ApiResponse = {
-  time_ns: string
-}
-
-type RequestOptions = {
-  method?: "GET" | "POST" | "DELETE"
-  body?: unknown
-}
 
 async function request<T extends ApiResponse>(path: string, options: RequestOptions = {}): Promise<T> {
   try {
@@ -112,92 +46,56 @@ async function request<T extends ApiResponse>(path: string, options: RequestOpti
 function violationQuery(filters: ViolationFilters): string {
   const params = new URLSearchParams()
   const values = { ...filters, limit: filters.limit ?? 50 }
-
   for (const [key, value] of Object.entries(values)) {
     if (value !== undefined && value !== "") {
       params.set(key, String(value))
     }
   }
-
   return params.toString()
 }
 
 export const api = {
-  health: () => request<{ status: string; time_ns: string }>("/healthz"),
+  health: () => request<HealthResponse>("/healthz"),
 
-  geofences: () => request<{ geofences: Geofence[]; time_ns: string }>("/geofences"),
+  geofences: () => request<GeofencesResponse>("/geofences"),
 
-  createGeofence: (input: {
-    name: string
-    description: string
-    category: string
-    coordinates: number[][]
-  }) =>
-    request<{ id: string; name: string; status: string; time_ns: string }>("/geofences", {
+  createGeofence: (input: CreateGeofenceRequest) =>
+    request<CreateGeofenceResponse>("/geofences", {
       method: "POST",
       body: input,
     }),
 
   deleteGeofence: (geofenceId: string) =>
-    request<{ status: string; geofence_id: string; time_ns: string }>(`/geofences/${geofenceId}`, {
+    request<DeleteGeofenceResponse>(`/geofences/${geofenceId}`, {
       method: "DELETE",
     }),
 
-  vehicles: () => request<{ vehicles: Vehicle[]; time_ns: string }>("/vehicles"),
+  vehicles: () => request<VehiclesResponse>("/vehicles"),
 
-  vehicleLocation: (vehicleId: string) =>
-    request<VehicleLocation & { time_ns: string }>(`/vehicles/location/${vehicleId}`),
+  vehicleLocation: (vehicleId: string) => request<VehicleLocationResponse>(`/vehicles/location/${vehicleId}`),
 
-  createVehicle: (input: {
-    vehicle_number: string
-    driver_name: string
-    vehicle_type: string
-    phone: string
-  }) =>
-    request<{ id: string; vehicle_number: string; status: string; time_ns: string }>("/vehicles", {
+  createVehicle: (input: CreateVehicleRequest) =>
+    request<CreateVehicleResponse>("/vehicles", {
       method: "POST",
       body: input,
     }),
 
-  updateVehicleLocation: (input: {
-    vehicle_id: string
-    latitude: number
-    longitude: number
-    timestamp: string
-  }) =>
-    request<{
-      vehicle_id: string
-      location_updated: boolean
-      current_geofences: CurrentGeofence[]
-      time_ns: string
-    }>("/vehicles/location", {
+  updateVehicleLocation: (input: UpdateVehicleLocationRequest) =>
+    request<UpdateVehicleLocationResponse>("/vehicles/location", {
       method: "POST",
       body: input,
     }),
 
-  configureAlert: (input: {
-    geofence_id: string
-    vehicle_id: string
-    event_type: "entry" | "exit" | "both"
-  }) =>
-    request<{
-      alert_id: string
-      geofence_id: string
-      vehicle_id: string
-      event_type: string
-      status: string
-      time_ns: string
-    }>("/alerts/configure", {
+  configureAlert: (input: ConfigureAlertRequest) =>
+    request<ConfigureAlertResponse>("/alerts/configure", {
       method: "POST",
       body: input,
     }),
 
-  alerts: () => request<{ alerts: AlertConfig[]; time_ns: string }>("/alerts"),
+  alerts: () => request<AlertsResponse>("/alerts"),
 
   violations: (filters: ViolationFilters = {}) =>
-    request<{ violations: Violation[]; total_count: number; time_ns: string }>(
-      `/violations/history?${violationQuery(filters)}`,
-    ),
+    request<ViolationsResponse>(`/violations/history?${violationQuery(filters)}`),
 }
 
 export function alertsWebSocketUrl(): string {

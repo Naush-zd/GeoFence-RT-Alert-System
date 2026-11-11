@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { Truck } from "lucide-react"
-import type { Vehicle } from "../lib/api"
+import type { Vehicle } from "../types/api"
 import { api as apiClient } from "../lib/api"
 import { useVehicleLocations } from "../hooks/use-vehicle-locations"
 import { Badge } from "../components/ui/badge"
