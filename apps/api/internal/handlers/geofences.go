@@ -29,7 +29,7 @@ func (h Handler) CreateGeofence(c *gin.Context) {
 		return
 	}
 
-	writeJSON(c, http.StatusCreated, map[string]any{
+	writeJSON(c, http.StatusCreated, gin.H{
 		"id":     geofence.ID,
 		"name":   geofence.Name,
 		"status": "active",
@@ -43,7 +43,7 @@ func (h Handler) ListGeofences(c *gin.Context) {
 		return
 	}
 
-	writeJSON(c, http.StatusOK, map[string]any{"geofences": geofences}, started)
+	writeJSON(c, http.StatusOK, gin.H{"geofences": geofences}, started)
 }
 
 func (h Handler) DeleteGeofence(c *gin.Context) {
@@ -59,5 +59,5 @@ func (h Handler) DeleteGeofence(c *gin.Context) {
 		writeError(c, status, err.Error(), started)
 		return
 	}
-	writeJSON(c, http.StatusOK, map[string]any{"status": "deleted", "geofence_id": c.Param("geofence_id")}, started)
+	writeJSON(c, http.StatusOK, gin.H{"status": "deleted", "geofence_id": c.Param("geofence_id")}, started)
 }

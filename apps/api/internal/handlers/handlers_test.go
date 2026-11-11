@@ -165,12 +165,12 @@ func TestWriteJSONIncludesExecutionTime(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	context, _ := gin.CreateTestContext(recorder)
 
-	writeJSON(context, http.StatusOK, map[string]any{"status": "ok"}, time.Now())
+	writeJSON(context, http.StatusOK, gin.H{"status": "ok"}, time.Now())
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("writeJSON() status = %d, want %d", recorder.Code, http.StatusOK)
 	}
-	var response map[string]any
+	var response gin.H
 	if err := json.NewDecoder(bytes.NewReader(recorder.Body.Bytes())).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}

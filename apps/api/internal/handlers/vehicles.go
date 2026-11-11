@@ -26,7 +26,7 @@ func (h Handler) CreateVehicle(c *gin.Context) {
 		return
 	}
 
-	writeJSON(c, http.StatusCreated, map[string]any{
+	writeJSON(c, http.StatusCreated, gin.H{
 		"id":             vehicle.ID,
 		"vehicle_number": vehicle.VehicleNumber,
 		"status":         "active",
@@ -40,5 +40,5 @@ func (h Handler) ListVehicles(c *gin.Context) {
 		return
 	}
 
-	writeJSON(c, http.StatusOK, map[string]any{"vehicles": vehicles}, started)
+	writeJSON(c, http.StatusOK, gin.H{"vehicles": vehicles}, started)
 }

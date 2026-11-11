@@ -33,7 +33,7 @@ func (h Handler) ConfigureAlert(c *gin.Context) {
 		return
 	}
 
-	writeJSON(c, http.StatusCreated, map[string]any{
+	writeJSON(c, http.StatusCreated, gin.H{
 		"alert_id":      alert.AlertID,
 		"geofence_id":   alert.GeofenceID,
 		"vehicle_id":    alert.VehicleID,
@@ -54,7 +54,7 @@ func (h Handler) ListAlerts(c *gin.Context) {
 		writeError(c, status, err.Error(), started)
 		return
 	}
-	writeJSON(c, http.StatusOK, map[string]any{"alerts": alerts}, started)
+	writeJSON(c, http.StatusOK, gin.H{"alerts": alerts}, started)
 }
 
 func (h Handler) ListViolations(c *gin.Context) {
@@ -75,7 +75,7 @@ func (h Handler) ListViolations(c *gin.Context) {
 		writeError(c, status, err.Error(), started)
 		return
 	}
-	writeJSON(c, http.StatusOK, map[string]any{"violations": violations, "total_count": total}, started)
+	writeJSON(c, http.StatusOK, gin.H{"violations": violations, "total_count": total}, started)
 }
 
 func (h Handler) broadcastAlert(c *gin.Context, vehicleID uuid.UUID, vehicleNumber, driverName string, geofence models.Geofence, eventType string, input models.LocationRequest) error {

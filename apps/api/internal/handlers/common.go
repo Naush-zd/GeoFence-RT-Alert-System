@@ -28,13 +28,13 @@ func New(db *gorm.DB, hub *realtime.Hub, geofences *services.GeofenceService, ve
 func (h Handler) Health(c *gin.Context) {
 	started := time.Now()
 	if err := h.DB.WithContext(c.Request.Context()).Exec("SELECT 1").Error; err != nil {
-		writeJSON(c, http.StatusServiceUnavailable, map[string]any{
+		writeJSON(c, http.StatusServiceUnavailable, gin.H{
 			"status": "database_unavailable",
 			"error":  "database is unavailable",
 		}, started)
 		return
 	}
-	writeJSON(c, http.StatusOK, map[string]any{"status": "ok"}, started)
+	writeJSON(c, http.StatusOK, gin.H{"status": "ok"}, started)
 }
 func decodeJSON(c *gin.Context, destination any) error {
 	decoder := json.NewDecoder(c.Request.Body)
@@ -48,9 +48,9 @@ func decodeJSON(c *gin.Context, destination any) error {
 	return nil
 }
 func writeError(c *gin.Context, status int, message string, started time.Time) {
-	writeJSON(c, status, map[string]any{"error": message}, started)
+	writeJSON(c, status, gin.H{"error": message}, started)
 }
-func writeJSON(c *gin.Context, status int, payload map[string]any, started time.Time) {
+func writeJSON(c *gin.Context, status int, payload gin.H, started time.Time) {
 	payload["time_ns"] = fmt.Sprintf("%d", time.Since(started).Nanoseconds())
 	c.JSON(status, payload)
 }

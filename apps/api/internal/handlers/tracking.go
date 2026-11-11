@@ -47,7 +47,7 @@ func (h Handler) UpdateVehicleLocation(c *gin.Context) {
 		}
 	}
 
-	writeJSON(c, http.StatusOK, map[string]any{
+	writeJSON(c, http.StatusOK, gin.H{
 		"vehicle_id":        input.VehicleID,
 		"location_updated":  true,
 		"current_geofences": result.CurrentGeofences,
@@ -72,7 +72,7 @@ func (h Handler) GetVehicleLocation(c *gin.Context) {
 		return
 	}
 
-	writeJSON(c, http.StatusOK, map[string]any{
+	writeJSON(c, http.StatusOK, gin.H{
 		"vehicle_id":        vehicle.ID,
 		"vehicle_number":    vehicle.VehicleNumber,
 		"current_location":  location,
