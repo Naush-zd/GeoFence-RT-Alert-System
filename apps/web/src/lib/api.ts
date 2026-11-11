@@ -99,8 +99,13 @@ export const api = {
 }
 
 export function alertsWebSocketUrl(): string {
-  if (!import.meta.env.PROD && configuredApiUrl?.startsWith("http")) {
-    return configuredApiUrl.replace(/^http/, "ws") + "/ws/alerts"
+  if (import.meta.env.PROD || configuredApiUrl?.startsWith("http")) {
+    const apiUrl = configuredApiUrl?.startsWith("http")
+      ? configuredApiUrl
+      : "https://geofence-rt-alert-system.onrender.com"
+    const websocketUrl = new URL("/ws/alerts", apiUrl)
+    websocketUrl.protocol = websocketUrl.protocol === "https:" ? "wss:" : "ws:"
+    return websocketUrl.toString()
   }
 
   const websocketProtocol = window.location.protocol === "https:" ? "wss:" : "ws:"
