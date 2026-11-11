@@ -3,17 +3,17 @@ package models
 import "time"
 
 type GeofenceRequest struct {
-	Name        string      `json:"name"`
+	Name        string      `json:"name" binding:"required"`
 	Description string      `json:"description"`
-	Coordinates [][]float64 `json:"coordinates"`
-	Category    string      `json:"category"`
+	Coordinates [][]float64 `json:"coordinates" binding:"required,min=4,dive,len=2"`
+	Category    string      `json:"category" binding:"required,oneof=delivery_zone restricted_zone toll_zone customer_area"`
 }
 
 type VehicleRequest struct {
-	VehicleNumber string `json:"vehicle_number"`
-	DriverName    string `json:"driver_name"`
-	VehicleType   string `json:"vehicle_type"`
-	Phone         string `json:"phone"`
+	VehicleNumber string `json:"vehicle_number" binding:"required"`
+	DriverName    string `json:"driver_name" binding:"required"`
+	VehicleType   string `json:"vehicle_type" binding:"required"`
+	Phone         string `json:"phone" binding:"required"`
 }
 
 type Geofence struct {
@@ -36,10 +36,10 @@ type Vehicle struct {
 }
 
 type LocationRequest struct {
-	VehicleID string    `json:"vehicle_id"`
+	VehicleID string    `json:"vehicle_id" binding:"required,uuid"`
 	Latitude  float64   `json:"latitude"`
 	Longitude float64   `json:"longitude"`
-	Timestamp time.Time `json:"timestamp"`
+	Timestamp time.Time `json:"timestamp" binding:"required"`
 }
 
 type CurrentGeofence struct {
@@ -58,9 +58,9 @@ type LocationResponse struct {
 }
 
 type AlertConfigRequest struct {
-	GeofenceID string `json:"geofence_id"`
-	VehicleID  string `json:"vehicle_id"`
-	EventType  string `json:"event_type"`
+	GeofenceID string `json:"geofence_id" binding:"required,uuid"`
+	VehicleID  string `json:"vehicle_id" binding:"omitempty,uuid"`
+	EventType  string `json:"event_type" binding:"required,oneof=entry exit both"`
 }
 
 type AlertConfig struct {

@@ -52,22 +52,25 @@ func TestValidateGeofence(t *testing.T) {
 	}
 }
 
-func TestValidateVehicle(t *testing.T) {
-	valid := models.VehicleRequest{
-		VehicleNumber: "KA-01-AB-1234",
-		DriverName:    "John Doe",
-		VehicleType:   "truck",
-		Phone:         "+1234567890",
-	}
+func TestDecodeJSONValidatesRequiredVehicleFields(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Request = httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"vehicle_number":"KA-01-AB-1234","driver_name":"John Doe","vehicle_type":"truck"}`))
 
-	if err := validateVehicle(valid); err != nil {
-		t.Fatalf("validateVehicle() error = %v", err)
+	var input models.VehicleRequest
+	if err := decodeJSON(context, &input); err == nil {
+		t.Fatal("decodeJSON() expected a validation error for missing phone")
 	}
+}
 
-	invalid := valid
-	invalid.Phone = ""
-	if err := validateVehicle(invalid); err == nil {
-		t.Fatal("validateVehicle() expected an error for missing phone")
+func TestDecodeJSONAcceptsValidGeofenceBindings(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Request = httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":"zone","coordinates":[[37,-122],[38,-122],[38,-121],[37,-122]],"category":"delivery_zone"}`))
+
+	var input models.GeofenceRequest
+	if err := decodeJSON(context, &input); err != nil {
+		t.Fatalf("decodeJSON() rejected valid geofence: %v", err)
 	}
 }
 

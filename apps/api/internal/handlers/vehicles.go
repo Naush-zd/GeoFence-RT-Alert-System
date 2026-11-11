@@ -7,7 +7,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/yourusername/geofencing-platform/apps/api/internal/models"
-	"github.com/yourusername/geofencing-platform/apps/api/internal/services"
 )
 
 func (h Handler) CreateVehicle(c *gin.Context) {
@@ -17,11 +16,6 @@ func (h Handler) CreateVehicle(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, err.Error(), started)
 		return
 	}
-	if err := services.ValidateVehicle(input); err != nil {
-		writeError(c, http.StatusBadRequest, err.Error(), started)
-		return
-	}
-
 	vehicle, err := h.Vehicles.Create(c.Request.Context(), input)
 	if err != nil {
 		if strings.Contains(err.Error(), "vehicles_vehicle_number_key") {
@@ -47,7 +41,4 @@ func (h Handler) ListVehicles(c *gin.Context) {
 	}
 
 	writeJSON(c, http.StatusOK, map[string]any{"vehicles": vehicles}, started)
-}
-func validateVehicle(input models.VehicleRequest) error {
-	return services.ValidateVehicle(input)
 }

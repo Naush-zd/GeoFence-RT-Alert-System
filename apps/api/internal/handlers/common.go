@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	"github.com/yourusername/geofencing-platform/apps/api/internal/realtime"
 	"github.com/yourusername/geofencing-platform/apps/api/internal/services"
 	"gorm.io/gorm"
@@ -40,6 +41,9 @@ func decodeJSON(c *gin.Context, destination any) error {
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(destination); err != nil {
 		return fmt.Errorf("invalid JSON: %w", err)
+	}
+	if err := binding.Validator.ValidateStruct(destination); err != nil {
+		return fmt.Errorf("invalid request: %w", err)
 	}
 	return nil
 }
