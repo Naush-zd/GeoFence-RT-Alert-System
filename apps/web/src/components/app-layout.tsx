@@ -54,8 +54,8 @@ function SidebarBrandToggle() {
         aria-label={label}
         title={label}
       >
-        <Radio className="size-[18px] transition-opacity group-hover:opacity-0 group-focus-visible:opacity-0" />
-        <PanelLeftIcon className="absolute size-[18px] opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+        <Radio className="size-4.5 transition-opacity group-hover:opacity-0 group-focus-visible:opacity-0" />
+        <PanelLeftIcon className="absolute size-4.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
       </Button>
       <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
         <span className="truncate font-semibold text-sidebar-foreground">GeoFence</span>
