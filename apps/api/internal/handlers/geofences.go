@@ -18,14 +18,14 @@ func (h Handler) CreateGeofence(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, err.Error(), started)
 		return
 	}
-	if err := services.ValidateGeofence(input); err != nil {
-		writeError(c, http.StatusBadRequest, err.Error(), started)
-		return
-	}
 
 	geofence, err := h.Geofences.Create(c.Request.Context(), input)
 	if err != nil {
-		writeError(c, http.StatusInternalServerError, "create geofence: "+err.Error(), started)
+		status := http.StatusInternalServerError
+		if errors.Is(err, services.ErrInvalidGeofence) {
+			status = http.StatusBadRequest
+		}
+		writeError(c, status, err.Error(), started)
 		return
 	}
 
@@ -60,7 +60,4 @@ func (h Handler) DeleteGeofence(c *gin.Context) {
 		return
 	}
 	writeJSON(c, http.StatusOK, map[string]any{"status": "deleted", "geofence_id": c.Param("geofence_id")}, started)
-}
-func validateGeofence(input models.GeofenceRequest) error {
-	return services.ValidateGeofence(input)
 }

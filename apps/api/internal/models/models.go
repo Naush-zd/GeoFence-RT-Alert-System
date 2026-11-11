@@ -37,8 +37,8 @@ type Vehicle struct {
 
 type LocationRequest struct {
 	VehicleID string    `json:"vehicle_id" binding:"required,uuid"`
-	Latitude  float64   `json:"latitude"`
-	Longitude float64   `json:"longitude"`
+	Latitude  float64   `json:"latitude" binding:"latitude"`
+	Longitude float64   `json:"longitude" binding:"longitude"`
 	Timestamp time.Time `json:"timestamp" binding:"required"`
 }
 

@@ -3,8 +3,8 @@ package services
 import (
 	"context"
 	"errors"
+
 	"github.com/google/uuid"
-	"strings"
 
 	"github.com/yourusername/geofencing-platform/apps/api/internal/models"
 	"github.com/yourusername/geofencing-platform/apps/api/internal/repositories"
@@ -12,6 +12,18 @@ import (
 
 type GeofenceService struct {
 	repository *repositories.GeofenceRepository
+}
+
+var ErrInvalidGeofence = errors.New("invalid geofence")
+
+type geofenceValidationError string
+
+func (err geofenceValidationError) Error() string {
+	return string(err)
+}
+
+func (geofenceValidationError) Is(target error) bool {
+	return target == ErrInvalidGeofence
 }
 
 func NewGeofenceService(repository *repositories.GeofenceRepository) *GeofenceService {
@@ -38,25 +50,17 @@ func (s *GeofenceService) Delete(ctx context.Context, value string) error {
 }
 
 func ValidateGeofence(input models.GeofenceRequest) error {
-	if strings.TrimSpace(input.Name) == "" || strings.TrimSpace(input.Category) == "" {
-		return errors.New("name and category are required")
-	}
 	if len(input.Coordinates) < 4 {
-		return errors.New("coordinates must contain at least 4 points")
-	}
-	switch input.Category {
-	case "delivery_zone", "restricted_zone", "toll_zone", "customer_area":
-	default:
-		return errors.New("invalid category")
+		return geofenceValidationError("coordinates must contain at least 4 points")
 	}
 	for _, point := range input.Coordinates {
 		if len(point) != 2 || point[0] < -90 || point[0] > 90 || point[1] < -180 || point[1] > 180 {
-			return errors.New("coordinates must be [latitude, longitude] within valid ranges")
+			return geofenceValidationError("coordinates must be [latitude, longitude] within valid ranges")
 		}
 	}
 	if input.Coordinates[0][0] != input.Coordinates[len(input.Coordinates)-1][0] ||
 		input.Coordinates[0][1] != input.Coordinates[len(input.Coordinates)-1][1] {
-		return errors.New("first and last coordinates must match")
+		return geofenceValidationError("first and last coordinates must match")
 	}
 	return nil
 }

@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/yourusername/geofencing-platform/apps/api/internal/models"
+	"github.com/yourusername/geofencing-platform/apps/api/internal/services"
 )
 
 func TestValidateGeofence(t *testing.T) {
@@ -32,16 +33,14 @@ func TestValidateGeofence(t *testing.T) {
 		valid bool
 	}{
 		{name: "valid polygon", input: valid, valid: true},
-		{name: "missing name", input: withGeofence(valid, func(input *models.GeofenceRequest) { input.Name = " " })},
 		{name: "too few points", input: withGeofence(valid, func(input *models.GeofenceRequest) { input.Coordinates = input.Coordinates[:3] })},
-		{name: "invalid category", input: withGeofence(valid, func(input *models.GeofenceRequest) { input.Category = "unknown" })},
 		{name: "invalid latitude", input: withGeofence(valid, func(input *models.GeofenceRequest) { input.Coordinates[1][0] = 91 })},
 		{name: "open polygon", input: withGeofence(valid, func(input *models.GeofenceRequest) { input.Coordinates[len(input.Coordinates)-1] = []float64{0, 0} })},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			err := validateGeofence(test.input)
+			err := services.ValidateGeofence(test.input)
 			if test.valid && err != nil {
 				t.Fatalf("validateGeofence() error = %v", err)
 			}
@@ -71,6 +70,77 @@ func TestDecodeJSONAcceptsValidGeofenceBindings(t *testing.T) {
 	var input models.GeofenceRequest
 	if err := decodeJSON(context, &input); err != nil {
 		t.Fatalf("decodeJSON() rejected valid geofence: %v", err)
+	}
+}
+
+func TestDecodeJSONValidatesGeofenceBindings(t *testing.T) {
+	validCoordinates := `[[37,-122],[38,-122],[38,-121],[37,-122]]`
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "missing name", body: `{"coordinates":` + validCoordinates + `,"category":"delivery_zone"}`},
+		{name: "invalid category", body: `{"name":"zone","coordinates":` + validCoordinates + `,"category":"unknown"}`},
+		{name: "too few points", body: `{"name":"zone","coordinates":[[37,-122],[38,-122],[37,-122]],"category":"delivery_zone"}`},
+		{name: "malformed coordinate pair", body: `{"name":"zone","coordinates":[[37,-122],[38,-122],[38,-121],[37]],"category":"delivery_zone"}`},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			context, _ := gin.CreateTestContext(recorder)
+			context.Request = httptest.NewRequest(http.MethodPost, "/", strings.NewReader(test.body))
+
+			var input models.GeofenceRequest
+			if err := decodeJSON(context, &input); err == nil {
+				t.Fatal("decodeJSON() expected a binding validation error")
+			}
+		})
+	}
+}
+
+func TestDecodeJSONValidatesLocationAndAlertBindings(t *testing.T) {
+	tests := []struct {
+		name        string
+		body        string
+		destination any
+		wantError   bool
+	}{
+		{
+			name:        "zero coordinates are valid",
+			body:        `{"vehicle_id":"00000000-0000-0000-0000-000000000001","latitude":0,"longitude":0,"timestamp":"2026-11-11T00:00:00Z"}`,
+			destination: &models.LocationRequest{},
+		},
+		{
+			name:        "latitude is out of range",
+			body:        `{"vehicle_id":"00000000-0000-0000-0000-000000000001","latitude":91,"longitude":0,"timestamp":"2026-11-11T00:00:00Z"}`,
+			destination: &models.LocationRequest{},
+			wantError:   true,
+		},
+		{
+			name:        "valid alert event type",
+			body:        `{"geofence_id":"00000000-0000-0000-0000-000000000001","vehicle_id":"","event_type":"both"}`,
+			destination: &models.AlertConfigRequest{},
+		},
+		{
+			name:        "invalid alert event type",
+			body:        `{"geofence_id":"00000000-0000-0000-0000-000000000001","vehicle_id":"","event_type":"sideways"}`,
+			destination: &models.AlertConfigRequest{},
+			wantError:   true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			context, _ := gin.CreateTestContext(recorder)
+			context.Request = httptest.NewRequest(http.MethodPost, "/", strings.NewReader(test.body))
+
+			err := decodeJSON(context, test.destination)
+			if (err != nil) != test.wantError {
+				t.Fatalf("decodeJSON() error = %v, wantError %t", err, test.wantError)
+			}
+		})
 	}
 }
 
