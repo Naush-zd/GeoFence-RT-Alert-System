@@ -5,6 +5,7 @@
 - **Web app:** https://geo-fence-rt-alert-system.vercel.app/
 - **API:** https://geofence-rt-alert-system.onrender.com
 - **API health:** https://geofence-rt-alert-system.onrender.com/healthz
+- **Demo Video:** https://drive.google.com/file/d/1XdtYTF8D1G_PGsiswneMBYAaBblW-kYe/view?usp=sharing
 
 The hosted database may be empty. Use **Set up Delhi simulation** on the Overview page to create sample geofence, vehicle, and alert data.
 
